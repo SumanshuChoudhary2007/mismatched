@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { getAdminUsers, getAdminMatches, createMatch, deleteMatch } from '../lib/api';
 import { LogOut, Heart, User as UserIcon, CheckCircle, XCircle, Zap, Star } from 'lucide-react';
@@ -196,9 +196,9 @@ export default function AdminDashboard() {
     return (
         <div className="app-container">
             <nav className="nav-header">
-                <div className="logo cursor-pointer" onClick={() => setSelectedUser(null)}>
+                <Link to="/" className="logo">
                     Mismatched <span style={{ fontSize: '1rem', opacity: 0.8 }}>| Admin</span>
-                </div>
+                </Link>
                 <div className="flex-gap-4">
                     <button onClick={handleLogout} className="btn btn-secondary"><LogOut size={18} /> Logout</button>
                 </div>

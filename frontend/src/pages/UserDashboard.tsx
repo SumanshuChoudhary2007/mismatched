@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { getProfile, updateProfile, getMyMatches, getMessages, sendMessage } from '../lib/api';
 import { Camera, LogOut, Save, User as UserIcon, Heart, Send, MapPin } from 'lucide-react';
@@ -158,7 +158,7 @@ export default function UserDashboard() {
     return (
         <div className="app-container">
             <nav className="nav-header">
-                <div className="logo">Mismatched</div>
+                <Link to="/" className="logo">Mismatched</Link>
                 <button onClick={handleLogout} className="btn btn-secondary"><LogOut size={18}/> Logout</button>
             </nav>
             <main className="dashboard-container">

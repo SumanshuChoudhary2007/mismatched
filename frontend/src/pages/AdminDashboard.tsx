@@ -62,15 +62,19 @@ export default function AdminDashboard() {
 
     const getPotentialMatches = () => {
         if (!selectedUser) return [];
+
+        // Build a set of all user IDs who already have any match
+        const matchedUserIds = new Set<string>();
+        matches.forEach(m => {
+            matchedUserIds.add(m.user1_id);
+            matchedUserIds.add(m.user2_id);
+        });
+
         return users.filter(u => {
             if (u.id === selectedUser.id) return false;
-            
-            // Check if u is already matched with selectedUser
-            const alreadyMatched = matches.some(m => 
-                (m.user1_id === u.id && m.user2_id === selectedUser.id) ||
-                (m.user2_id === u.id && m.user1_id === selectedUser.id)
-            );
-            if (alreadyMatched) return false;
+
+            // Exclude anyone who is already matched with someone
+            if (matchedUserIds.has(u.id)) return false;
 
             if (selectedUser.interested_in === 'male' && u.gender !== 'male') return false;
             if (selectedUser.interested_in === 'female' && u.gender !== 'female') return false;

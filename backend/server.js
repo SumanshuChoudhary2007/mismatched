@@ -148,5 +148,11 @@ app.post('/api/matches/:match_id/messages', authenticateUser, async (req, res) =
   res.json(data);
 });
 
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+// Local dev: start the server normally
+// Vercel: exports the app as a serverless function
+if (process.env.VERCEL !== '1') {
+  const PORT = process.env.PORT || 5000;
+  app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+}
+
+export default app;

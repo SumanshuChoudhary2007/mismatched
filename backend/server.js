@@ -114,5 +114,39 @@ app.delete('/api/admin/match/:id', authenticateUser, isAdmin, async (req, res) =
   res.json(data);
 });
 
+app.get('/api/matches/:match_id/messages', authenticateUser, async (req, res) => {
+  const { match_id } = req.params;
+  const { data: messages, error } = await supabase
+    .from('messages')
+    .select('*, sender:profiles(full_name)')
+    .eq('match_id', match_id)
+    .order('created_at', { ascending: true });
+  
+  if (error) return res.status(400).json({ error: error.message });
+  res.json(messages);
+});
+
+app.post('/api/matches/:match_id/messages', authenticateUser, async (req, res) => {
+  const { match_id } = req.params;
+  const { content } = req.body;
+  
+  // Verify match exists and user is part of it
+  const { data: match, error: matchError } = await supabase.from('matches').select('*').eq('id', match_id).single();
+  if (matchError || (match.user1_id !== req.user.id && match.user2_id !== req.user.id)) return res.status(403).json({ error: 'Access denied' });
+
+  // Check message limit
+  const { count } = await supabase.from('messages').select('*', { count: 'exact', head: true }).eq('match_id', match_id);
+  if (count >= 6) return res.status(400).json({ error: 'Message limit reached for this match (Maximum 6)' });
+
+  const { data, error } = await supabase.from('messages').insert([{
+    match_id,
+    sender_id: req.user.id,
+    content
+  }]).select('*, sender:profiles(full_name)').single();
+  
+  if (error) return res.status(400).json({ error: error.message });
+  res.json(data);
+});
+
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

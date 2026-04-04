@@ -74,3 +74,24 @@ export const deleteMatch = async (match_id: string) => {
     }
     return res.json();
 };
+
+export const getMessages = async (match_id: string) => {
+    const headers = await getHeaders();
+    const res = await fetch(`${API_URL}/matches/${match_id}/messages`, { headers });
+    if (!res.ok) throw new Error('Failed to fetch messages');
+    return res.json();
+};
+
+export const sendMessage = async (match_id: string, content: string) => {
+    const headers = await getHeaders();
+    const res = await fetch(`${API_URL}/matches/${match_id}/messages`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ content })
+    });
+    if (!res.ok) {
+        const errObj = await res.json().catch(() => ({}));
+        throw new Error(errObj.error || 'Failed to send message');
+    }
+    return res.json();
+};

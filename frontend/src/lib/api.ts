@@ -1,97 +1,144 @@
 import { supabase } from './supabase';
 
-const API_URL = import.meta.env.VITE_API_URL || '/api';
-
-const getHeaders = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    return {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${session?.access_token}`
-    };
-};
-
 export const fetchStats = async () => {
-    const res = await fetch(`${API_URL}/stats`);
-    if (!res.ok) throw new Error('Failed to fetch stats');
-    return res.json();
+    const { count: users } = await supabase
+        .from('profiles')
+        .select('*', { count: 'exact', head: true })
+        .eq('is_admin', false);
+    const { count: matches } = await supabase
+        .from('matches')
+        .select('*', { count: 'exact', head: true });
+    return { users: users || 0, matches: matches || 0 };
 };
 
 export const getProfile = async () => {
-    const headers = await getHeaders();
-    const res = await fetch(`${API_URL}/profile`, { headers });
-    if (!res.ok) throw new Error('Failed to fetch profile');
-    return res.json();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Not authenticated');
+    const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single();
+    if (error) throw new Error(error.message);
+    return data;
 };
 
 export const updateProfile = async (profileUpdate: any) => {
-    const headers = await getHeaders();
-    const res = await fetch(`${API_URL}/profile`, { method: 'POST', headers, body: JSON.stringify(profileUpdate) });
-    if (!res.ok) {
-        const errObj = await res.json().catch(() => ({}));
-        throw new Error(errObj.error || 'Failed to update profile');
-    }
-    return res.json();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Not authenticated');
+    const updates = { ...profileUpdate, id: user.id, email: user.email };
+    const { data, error } = await supabase
+        .from('profiles')
+        .upsert(updates)
+        .select()
+        .single();
+    if (error) throw new Error(error.message);
+    return data;
 };
 
 export const getMyMatches = async () => {
-    const headers = await getHeaders();
-    const res = await fetch(`${API_URL}/matches`, { headers });
-    if (!res.ok) throw new Error('Failed to fetch matches');
-    return res.json();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Not authenticated');
+
+    const { data: matches, error } = await supabase
+        .from('matches')
+        .select('*')
+        .or(`user1_id.eq.${user.id},user2_id.eq.${user.id}`);
+
+    if (error) throw new Error(error.message);
+
+    const enriched = await Promise.all((matches || []).map(async (m) => {
+        const otherId = m.user1_id === user.id ? m.user2_id : m.user1_id;
+        const { data: otherProfile } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', otherId)
+            .single();
+        return { ...m, match_profile: otherProfile };
+    }));
+
+    return enriched;
 };
 
 export const getAdminUsers = async () => {
-    const headers = await getHeaders();
-    const res = await fetch(`${API_URL}/admin/users`, { headers });
-    if (!res.ok) throw new Error('Failed to fetch users');
-    return res.json();
+    const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('is_admin', false);
+    if (error) throw new Error(error.message);
+    return data || [];
 };
 
 export const getAdminMatches = async () => {
-    const headers = await getHeaders();
-    const res = await fetch(`${API_URL}/admin/all-matches`, { headers });
-    if (!res.ok) throw new Error('Failed to fetch all matches');
-    return res.json();
+    const { data: matches, error } = await supabase
+        .from('matches')
+        .select('*');
+    if (error) throw new Error(error.message);
+
+    const enriched = await Promise.all((matches || []).map(async (m) => {
+        const { data: u1 } = await supabase.from('profiles').select('*').eq('id', m.user1_id).single();
+        const { data: u2 } = await supabase.from('profiles').select('*').eq('id', m.user2_id).single();
+        return { ...m, user1: u1, user2: u2 };
+    }));
+
+    return enriched;
 };
 
 export const createMatch = async (user1_id: string, user2_id: string) => {
-    const headers = await getHeaders();
-    const res = await fetch(`${API_URL}/admin/match`, { 
-        method: 'POST', 
-        headers, 
-        body: JSON.stringify({ user1_id, user2_id }) 
-    });
-    if (!res.ok) throw new Error('Failed to create match');
-    return res.json();
+    if (user1_id === user2_id) throw new Error('Cannot match user with themselves');
+
+    const { data: u1 } = await supabase.from('profiles').select('full_name').eq('id', user1_id).single();
+    const { data: u2 } = await supabase.from('profiles').select('full_name').eq('id', user2_id).single();
+
+    const { data, error } = await supabase.from('matches').insert([{
+        user1_id,
+        user2_id,
+        user1_name: u1?.full_name || 'Unknown',
+        user2_name: u2?.full_name || 'Unknown'
+    }]).select();
+
+    if (error) throw new Error(error.message);
+    return data;
 };
 
 export const deleteMatch = async (match_id: string) => {
-    const headers = await getHeaders();
-    const res = await fetch(`${API_URL}/admin/match/${match_id}`, { method: 'DELETE', headers });
-    if (!res.ok) {
-        const errObj = await res.json().catch(() => ({}));
-        throw new Error(errObj.error || 'Failed to delete match');
-    }
-    return res.json();
+    const { data, error } = await supabase
+        .from('matches')
+        .delete()
+        .eq('id', match_id)
+        .select();
+    if (error) throw new Error(error.message);
+    return data;
 };
 
 export const getMessages = async (match_id: string) => {
-    const headers = await getHeaders();
-    const res = await fetch(`${API_URL}/matches/${match_id}/messages`, { headers });
-    if (!res.ok) throw new Error('Failed to fetch messages');
-    return res.json();
+    const { data: messages, error } = await supabase
+        .from('messages')
+        .select('*, sender:profiles(full_name)')
+        .eq('match_id', match_id)
+        .order('created_at', { ascending: true });
+    if (error) throw new Error(error.message);
+    return messages || [];
 };
 
 export const sendMessage = async (match_id: string, content: string) => {
-    const headers = await getHeaders();
-    const res = await fetch(`${API_URL}/matches/${match_id}/messages`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ content })
-    });
-    if (!res.ok) {
-        const errObj = await res.json().catch(() => ({}));
-        throw new Error(errObj.error || 'Failed to send message');
-    }
-    return res.json();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Not authenticated');
+
+    // Check message limit
+    const { count } = await supabase
+        .from('messages')
+        .select('*', { count: 'exact', head: true })
+        .eq('match_id', match_id);
+
+    if ((count || 0) >= 6) throw new Error('Message limit reached for this match (Maximum 6)');
+
+    const { data, error } = await supabase
+        .from('messages')
+        .insert([{ match_id, sender_id: user.id, content }])
+        .select('*, sender:profiles(full_name)')
+        .single();
+
+    if (error) throw new Error(error.message);
+    return data;
 };

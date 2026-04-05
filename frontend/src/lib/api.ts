@@ -126,22 +126,28 @@ export const markLocationShared = async (match_id: string, location: string) => 
     if (!user) throw new Error('Not authenticated');
 
     // Check if location already shared for this match
-    const { data: match } = await supabase
+    const { data: match, error: matchError } = await supabase
         .from('matches')
         .select('location_shared')
         .eq('id', match_id)
         .single();
 
-    if (match?.location_shared) throw new Error('Location has already been shared for this match.');
+    if (matchError) throw new Error('Could not verify match: ' + matchError.message);
+    if (!match) throw new Error('Match not found.');
+    if (match.location_shared === true) throw new Error('Location has already been shared for this match.');
 
-    // Mark as shared
-    const { error: updateError } = await supabase
+    // Mark as shared — requires UPDATE RLS policy
+    const { data: updated, error: updateError } = await supabase
         .from('matches')
         .update({ location_shared: true })
-        .eq('id', match_id);
-    if (updateError) throw new Error(updateError.message);
+        .eq('id', match_id)
+        .select('location_shared')
+        .single();
 
-    // Insert location as a special message (bypassing the 6-message limit)
+    if (updateError) throw new Error('Failed to mark location as shared: ' + updateError.message);
+    if (!updated || updated.location_shared !== true) throw new Error('Could not lock location sharing. Please try again.');
+
+    // Insert location as a special message (bypasses the 6-message limit)
     const { data, error } = await supabase
         .from('messages')
         .insert([{ match_id, sender_id: user.id, content: `📍 Meet me here: ${location}` }])

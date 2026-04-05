@@ -121,6 +121,36 @@ export const getMessages = async (match_id: string) => {
     return messages || [];
 };
 
+export const markLocationShared = async (match_id: string, location: string) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Not authenticated');
+
+    // Check if location already shared for this match
+    const { data: match } = await supabase
+        .from('matches')
+        .select('location_shared')
+        .eq('id', match_id)
+        .single();
+
+    if (match?.location_shared) throw new Error('Location has already been shared for this match.');
+
+    // Mark as shared
+    const { error: updateError } = await supabase
+        .from('matches')
+        .update({ location_shared: true })
+        .eq('id', match_id);
+    if (updateError) throw new Error(updateError.message);
+
+    // Insert location as a special message (bypassing the 6-message limit)
+    const { data, error } = await supabase
+        .from('messages')
+        .insert([{ match_id, sender_id: user.id, content: `📍 Meet me here: ${location}` }])
+        .select('*, sender:profiles(full_name)')
+        .single();
+    if (error) throw new Error(error.message);
+    return data;
+};
+
 export const sendMessage = async (match_id: string, content: string) => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');

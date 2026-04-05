@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { getProfile, updateProfile, getMyMatches, getMessages, sendMessage } from '../lib/api';
+import { getProfile, updateProfile, getMyMatches, getMessages, sendMessage, markLocationShared } from '../lib/api';
+
 import { Camera, LogOut, Save, User as UserIcon, Heart, Send, MapPin } from 'lucide-react';
 
 export default function UserDashboard() {
@@ -101,6 +102,22 @@ export default function UserDashboard() {
             setMessages(msgData);
         } catch(err: any) {
             alert('Error sending location: ' + err.message);
+        }
+    };
+
+    const handleShareFinalLocation = async (match_id: string) => {
+        const location = window.prompt("📍 Share your meeting spot (e.g. Blue Tokai Coffee, Sector 43):\n\nThis can only be shared ONCE.");
+        if (!location?.trim()) return;
+
+        try {
+            await markLocationShared(match_id, location.trim());
+            // Refresh both messages and matches (to update location_shared flag)
+            const msgData = await getMessages(match_id);
+            setMessages(msgData);
+            const matchesData = await getMyMatches();
+            setMatches(matchesData);
+        } catch(err: any) {
+            alert(err.message);
         }
     };
 
@@ -206,7 +223,30 @@ export default function UserDashboard() {
                                             ))}
                                         </div>
                                         {messages.length >= 6 ? (
-                                            <div className="chat-limit-warning">Message limit reached (6 max). Time to meet in person! 😉</div>
+                                            <div style={{display: 'flex', flexDirection: 'column', gap: '1rem'}}>
+                                                <div className="chat-limit-warning">Message limit reached (6 max). Time to meet in person! 😉</div>
+                                                <div style={{textAlign: 'center', padding: '0 1rem 1rem'}}>
+                                                    {m.location_shared ? (
+                                                        <div style={{display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', color: 'var(--success)', fontWeight: 600, fontSize: '0.95rem'}}>
+                                                            <MapPin size={18}/>
+                                                            Location has been shared! Check the messages above.
+                                                        </div>
+                                                    ) : (
+                                                        <>
+                                                            <p style={{fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '0.75rem'}}>
+                                                                You can share your meeting spot <strong>once</strong> even after the chat limit.
+                                                            </p>
+                                                            <button
+                                                                className="btn btn-primary"
+                                                                onClick={() => handleShareFinalLocation(m.id)}
+                                                                style={{gap: '0.5rem', display: 'inline-flex', alignItems: 'center'}}
+                                                            >
+                                                                <MapPin size={18}/> Share Meeting Location
+                                                            </button>
+                                                        </>
+                                                    )}
+                                                </div>
+                                            </div>
                                         ) : (
                                             <form className="chat-input-area" onSubmit={(e) => handleSendMessage(e, m.id)}>
                                                 <button type="button" className="btn btn-secondary" style={{padding: '0.75rem', borderRadius: '50%'}} onClick={(e) => handleDropLocation(e, m.id)} title="Drop Meeting Location">

@@ -648,3 +648,285 @@ body {
   .auth-card h2 { font-size: 1.7rem; }
   .chat-history { max-height: 220px; }
 }
+
+/* ─── Gradient Text ─────────────────────────────────────────────────────── */
+.gradient-text {
+  background: linear-gradient(135deg, var(--primary), var(--secondary));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* ─── Hero Badge ────────────────────────────────────────────────────────── */
+.hero-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: rgba(255, 46, 99, 0.1);
+  border: 1px solid rgba(255, 46, 99, 0.3);
+  color: var(--primary);
+  padding: 0.4rem 1rem;
+  border-radius: 9999px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  margin-bottom: 1.5rem;
+  text-transform: uppercase;
+}
+
+/* ─── Trust Row ─────────────────────────────────────────────────────────── */
+.trust-row {
+  display: flex;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: 1.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.trust-row span {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--text-secondary);
+  font-size: 0.88rem;
+  font-weight: 500;
+}
+
+/* ─── Site Footer ───────────────────────────────────────────────────────── */
+.site-footer {
+  text-align: center;
+  padding: 2rem 1rem;
+  border-top: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+}
+
+.footer-tagline {
+  margin-top: 0.35rem;
+  font-style: italic;
+  opacity: 0.6;
+}
+
+/* ─── Split Auth Layout ─────────────────────────────────────────────────── */
+.auth-split-layout {
+  display: flex;
+  min-height: 100vh;
+}
+
+.auth-brand-panel {
+  width: 420px;
+  min-width: 340px;
+  background: linear-gradient(160deg, rgba(255, 46, 99, 0.12) 0%, rgba(8, 217, 214, 0.08) 100%);
+  border-right: 1px solid var(--border);
+  padding: 2.5rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+}
+
+.auth-brand-content {
+  text-align: center;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+}
+
+.auth-brand-icon {
+  width: 90px;
+  height: 90px;
+  background: rgba(255, 46, 99, 0.1);
+  border: 1px solid rgba(255, 46, 99, 0.25);
+  border-radius: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 1rem;
+}
+
+.auth-brand-content h2 {
+  font-size: 2rem;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+}
+
+.auth-brand-content p {
+  color: var(--text-secondary);
+  font-size: 1rem;
+  line-height: 1.7;
+  max-width: 280px;
+}
+
+.auth-brand-footer {
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+.auth-link {
+  color: var(--primary);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.auth-link:hover {
+  text-decoration: underline;
+}
+
+.auth-form-panel {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2.5rem;
+}
+
+.auth-form-inner {
+  width: 100%;
+  max-width: 420px;
+}
+
+.auth-form-title {
+  font-size: 2.2rem;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  margin-bottom: 0.4rem;
+}
+
+.auth-form-subtitle {
+  color: var(--text-secondary);
+  font-size: 1rem;
+  margin-bottom: 2rem;
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+/* ─── Input With Icon ───────────────────────────────────────────────────── */
+.input-icon-wrapper {
+  position: relative;
+}
+
+.input-icon {
+  position: absolute;
+  left: 1rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-secondary);
+  pointer-events: none;
+}
+
+.form-input.with-icon {
+  padding-left: 2.8rem;
+}
+
+/* ─── Form Hint ─────────────────────────────────────────────────────────── */
+.form-hint {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  margin-top: 0.4rem;
+}
+
+/* ─── Auth Submit Button ────────────────────────────────────────────────── */
+.auth-submit-btn {
+  margin-top: 0.75rem;
+}
+
+/* ─── Button Loading Spinner ────────────────────────────────────────────── */
+.btn-spinner {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: white;
+  animation: spin 0.7s linear infinite;
+  display: inline-block;
+}
+
+/* ─── Auth Terms ────────────────────────────────────────────────────────── */
+.auth-terms {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.terms-link {
+  color: var(--primary);
+  cursor: pointer;
+}
+
+.terms-link:hover {
+  text-decoration: underline;
+}
+
+/* Hide the mobile auth link on desktop (already shown in brand panel) */
+.auth-mobile-link {
+  display: none;
+}
+
+/* ─── Responsive Auth Split ─────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .auth-split-layout {
+    flex-direction: column;
+  }
+
+  .auth-brand-panel {
+    width: 100%;
+    min-width: unset;
+    height: auto;
+    position: static;
+    padding: 2rem 1.5rem 1.5rem;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .auth-brand-content {
+    padding: 1rem 0;
+  }
+
+  .auth-brand-content h2 {
+    font-size: 1.5rem;
+  }
+
+  .auth-brand-content p {
+    font-size: 0.9rem;
+  }
+
+  .auth-brand-icon {
+    width: 60px;
+    height: 60px;
+    border-radius: 16px;
+    margin-bottom: 0.5rem;
+  }
+
+  .auth-brand-footer {
+    display: none;
+  }
+
+  .auth-mobile-link {
+    display: block;
+  }
+
+  .auth-form-panel {
+    padding: 2rem 1.25rem;
+    align-items: flex-start;
+  }
+
+  .auth-form-inner {
+    width: 100%;
+  }
+
+  .trust-row {
+    gap: 1rem;
+  }
+}
+

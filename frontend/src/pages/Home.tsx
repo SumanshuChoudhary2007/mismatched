@@ -16,7 +16,7 @@ export default function Home() {
                 <Link to="/" className="logo">Mismatched</Link>
                 <div className="flex-gap-4">
                     <Link to="/login" className="btn btn-secondary">Login</Link>
-                    <Link to="/signup" className="btn btn-primary">Get Started</Link>
+                    <Link to="/signup" className="btn btn-primary">Sign Up</Link>
                 </div>
             </nav>
 
@@ -42,10 +42,7 @@ export default function Home() {
                 <div className="flex-gap-4 animate-fade-in" style={{ animationDelay: '0.4s' }}>
                     <Link to="/signup" className="btn btn-primary">
                         <Heart size={18} />
-                        Start Matching
-                    </Link>
-                    <Link to="/login" className="btn btn-secondary">
-                        Sign In
+                        Get Started — It's Free
                     </Link>
                 </div>
 

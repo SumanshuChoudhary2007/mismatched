@@ -1,14 +1,13 @@
 import { supabase } from './supabase';
 
 export const fetchStats = async () => {
-    const { count: users } = await supabase
-        .from('profiles')
-        .select('*', { count: 'exact', head: true })
-        .eq('is_admin', false);
-    const { count: matches } = await supabase
-        .from('matches')
-        .select('*', { count: 'exact', head: true });
-    return { users: users || 0, matches: matches || 0 };
+    // Uses a SECURITY DEFINER RPC so stats are visible to unauthenticated visitors too
+    const { data, error } = await supabase.rpc('get_public_stats');
+    if (error || !data) {
+        console.error('fetchStats error:', error);
+        return { users: 0, matches: 0 };
+    }
+    return { users: Number(data.users) || 0, matches: Number(data.matches) || 0 };
 };
 
 export const getProfile = async () => {

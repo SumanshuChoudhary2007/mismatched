@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Heart, Users, Sparkles, ShieldCheck, Star } from 'lucide-react';
+import { Heart, Users, Sparkles, ShieldCheck } from 'lucide-react';
 import { fetchStats } from '../lib/api';
 
 export default function Home() {
@@ -49,7 +49,7 @@ export default function Home() {
                 {/* Trust indicators */}
                 <div className="trust-row animate-fade-in" style={{ animationDelay: '0.55s' }}>
                     <span><ShieldCheck size={15} /> Verified profiles</span>
-                    <span><Star size={15} /> Expert-curated matches</span>
+                    <span><Sparkles size={15} /> Expert-curated matches</span>
                     <span><Heart size={15} /> Real connections</span>
                 </div>
 
@@ -65,11 +65,7 @@ export default function Home() {
                         <div className="stat-number">{stats.matches}+</div>
                         <div className="stat-label">Successful Matches</div>
                     </div>
-                    <div className="stat-card">
-                        <Star size={28} className="mb-4" color="#FF8A00" />
-                        <div className="stat-number">4.9</div>
-                        <div className="stat-label">Average Rating</div>
-                    </div>
+
                 </div>
             </main>
 

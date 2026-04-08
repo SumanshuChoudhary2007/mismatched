@@ -156,6 +156,28 @@ export const markLocationShared = async (match_id: string, location: string) => 
     return data;
 };
 
+export const getRegistrationCounts = async (): Promise<{ male_count: number; female_count: number }> => {
+    const { data, error } = await supabase.rpc('get_registration_counts');
+    if (error) {
+        console.error('getRegistrationCounts error:', error);
+        return { male_count: 0, female_count: 0 };
+    }
+    if (data && data.length > 0) {
+        return { male_count: Number(data[0].male_count) || 0, female_count: Number(data[0].female_count) || 0 };
+    }
+    return { male_count: 0, female_count: 0 };
+};
+
+export const uploadProfilePhoto = async (file: Blob, userId: string): Promise<string> => {
+    const fileName = `${userId}/profile.jpg`;
+    const { error } = await supabase.storage
+        .from('profile-photos')
+        .upload(fileName, file, { upsert: true, contentType: 'image/jpeg' });
+    if (error) throw new Error('Photo upload failed: ' + error.message);
+    const { data } = supabase.storage.from('profile-photos').getPublicUrl(fileName);
+    return data.publicUrl;
+};
+
 export const sendMessage = async (match_id: string, content: string) => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');

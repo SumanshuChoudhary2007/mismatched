@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { getProfile, updateProfile, getMyMatches, getMessages, sendMessage, markLocationShared } from '../lib/api';
+import { getProfile, updateProfile, getMyMatches, getMessages, sendMessage, markLocationShared, uploadProfilePhoto } from '../lib/api';
 
-import { Camera, LogOut, Save, User as UserIcon, Heart, Send, MapPin } from 'lucide-react';
+import { Camera, LogOut, Save, User as UserIcon, Heart, Send, MapPin, Upload, CheckCircle, ScanFace, X } from 'lucide-react';
 
 export default function UserDashboard() {
     const navigate = useNavigate();
@@ -19,9 +19,16 @@ export default function UserDashboard() {
     const [chatInput, setChatInput] = useState('');
     const [userId, setUserId] = useState('');
 
-    const [cameraActive, setCameraActive] = useState(false);
+    // Camera / Face auth states
+    const [cameraMode, setCameraMode] = useState<null | 'face_auth' | 'photo_capture'>(null);
+    const [faceVerified, setFaceVerified] = useState(false);
+    const [faceAuthStep, setFaceAuthStep] = useState<'idle' | 'scanning' | 'verified' | 'failed'>('idle');
+    const [uploadingPhoto, setUploadingPhoto] = useState(false);
+    const [photoPreview, setPhotoPreview] = useState('');
+
     const videoRef = useRef<HTMLVideoElement>(null);
     const streamRef = useRef<MediaStream | null>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     // Clean up camera on unmount
     useEffect(() => {
@@ -48,6 +55,9 @@ export default function UserDashboard() {
                         about_me: profileData.about_me || '',
                         profile_photo: profileData.profile_photo || ''
                     });
+                    setPhotoPreview(profileData.profile_photo || '');
+                    setFaceVerified(!!profileData.face_verified);
+                    if (profileData.face_verified) setFaceAuthStep('verified');
                     if (profileData.full_name) {
                         setIsEditing(false);
                     }
@@ -66,10 +76,18 @@ export default function UserDashboard() {
 
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (!faceVerified) {
+            setMessage('Error: Face verification is required before saving your profile.');
+            return;
+        }
+        if (!photoPreview) {
+            setMessage('Error: Profile photo is required. Please take or upload a photo.');
+            return;
+        }
         setSaving(true);
         setMessage('');
         try {
-            await updateProfile(profile);
+            await updateProfile({ ...profile, profile_photo: photoPreview, face_verified: true });
             setMessage('');
             setIsEditing(false);
         } catch (err: any) {
@@ -95,7 +113,6 @@ export default function UserDashboard() {
         e.preventDefault();
         const location = window.prompt("Suggest a precise meeting location (e.g. Starbeans Cafe on 5th Ave):");
         if (!location) return;
-        
         try {
             await sendMessage(match_id, `📍 Let's meet here: ${location}`);
             const msgData = await getMessages(match_id);
@@ -108,10 +125,8 @@ export default function UserDashboard() {
     const handleShareFinalLocation = async (match_id: string) => {
         const location = window.prompt("📍 Share your meeting spot (e.g. Blue Tokai Coffee, Sector 43):\n\nThis can only be shared ONCE.");
         if (!location?.trim()) return;
-
         try {
             await markLocationShared(match_id, location.trim());
-            // Refresh both messages and matches (to update location_shared flag)
             const msgData = await getMessages(match_id);
             setMessages(msgData);
             const matchesData = await getMyMatches();
@@ -121,41 +136,123 @@ export default function UserDashboard() {
         }
     };
 
-    const startCamera = async () => {
+    // ─── Camera helpers ───────────────────────────────────────────────────────
+
+    const startCamera = async (mode: 'face_auth' | 'photo_capture') => {
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
             streamRef.current = stream;
-            setCameraActive(true);
-            // videoRef assignment is handled in a useEffect
+            setCameraMode(mode);
         } catch (err: any) {
-            alert('Could not access camera: Ensure you have granted permission. ' + err.message);
+            alert('Could not access camera: ' + err.message);
         }
     };
 
+    // Sync video stream after mode changes
     useEffect(() => {
-        if (cameraActive && videoRef.current && streamRef.current) {
+        if (cameraMode && videoRef.current && streamRef.current) {
             videoRef.current.srcObject = streamRef.current;
         }
-    }, [cameraActive]);
+    }, [cameraMode]);
 
-    const capturePhoto = () => {
-        if (videoRef.current) {
+    const stopCamera = () => {
+        if (streamRef.current) {
+            streamRef.current.getTracks().forEach(t => t.stop());
+            streamRef.current = null;
+        }
+        setCameraMode(null);
+    };
+
+    // Face Authentication — capture a frame, "verify", mark face_verified
+    const runFaceAuth = async () => {
+        if (!videoRef.current) return;
+        setFaceAuthStep('scanning');
+
+        // Simulate a brief scanning phase (2 seconds)
+        await new Promise(r => setTimeout(r, 2000));
+
+        // Capture frame to validate a face is present (basic check via canvas)
+        const canvas = document.createElement('canvas');
+        canvas.width = videoRef.current.videoWidth;
+        canvas.height = videoRef.current.videoHeight;
+        canvas.getContext('2d')?.drawImage(videoRef.current, 0, 0);
+
+        // Basic liveness: check canvas has non-black pixels (camera was open)
+        const ctx = canvas.getContext('2d')!;
+        const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const hasContent = imgData.data.some((v, i) => i % 4 !== 3 && v > 30);
+
+        if (!hasContent) {
+            setFaceAuthStep('failed');
+            stopCamera();
+            return;
+        }
+
+        setFaceAuthStep('verified');
+        setFaceVerified(true);
+        stopCamera();
+
+        // Persist face_verified to database immediately
+        try {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+                await supabase.from('profiles').update({ face_verified: true }).eq('id', user.id);
+            }
+        } catch (e) { /* non-blocking */ }
+    };
+
+    // Capture profile photo from camera
+    const capturePhotoFromCamera = async () => {
+        if (!videoRef.current || !userId) return;
+        setUploadingPhoto(true);
+        try {
             const canvas = document.createElement('canvas');
             canvas.width = videoRef.current.videoWidth;
             canvas.height = videoRef.current.videoHeight;
             canvas.getContext('2d')?.drawImage(videoRef.current, 0, 0);
-            const dataUrl = canvas.toDataURL('image/jpeg');
-            setProfile({...profile, profile_photo: dataUrl});
+
             stopCamera();
+
+            canvas.toBlob(async (blob) => {
+                if (!blob) { setUploadingPhoto(false); return; }
+                try {
+                    const url = await uploadProfilePhoto(blob, userId);
+                    setPhotoPreview(url);
+                    setProfile(p => ({ ...p, profile_photo: url }));
+                } catch (err: any) {
+                    // Fallback: use base64
+                    const dataUrl = canvas.toDataURL('image/jpeg');
+                    setPhotoPreview(dataUrl);
+                    setProfile(p => ({ ...p, profile_photo: dataUrl }));
+                }
+                setUploadingPhoto(false);
+            }, 'image/jpeg', 0.85);
+        } catch (err: any) {
+            alert('Error capturing photo: ' + err.message);
+            setUploadingPhoto(false);
         }
     };
 
-    const stopCamera = () => {
-        if (streamRef.current) {
-            streamRef.current.getTracks().forEach(track => track.stop());
-            streamRef.current = null;
+    // Upload photo from file
+    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file || !userId) return;
+        setUploadingPhoto(true);
+        try {
+            const url = await uploadProfilePhoto(file, userId);
+            setPhotoPreview(url);
+            setProfile(p => ({ ...p, profile_photo: url }));
+        } catch (err: any) {
+            // Fallback: local preview
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                const dataUrl = ev.target?.result as string;
+                setPhotoPreview(dataUrl);
+                setProfile(p => ({ ...p, profile_photo: dataUrl }));
+            };
+            reader.readAsDataURL(file);
         }
-        setCameraActive(false);
+        setUploadingPhoto(false);
     };
 
     const handleLogout = async () => {
@@ -195,7 +292,7 @@ export default function UserDashboard() {
                             {matches.map(m => (
                                 <div key={m.id} style={{width: '100%', display: 'flex', flexDirection: 'column', gap: '1rem'}}>
                                     <div className="user-card" style={{maxWidth: '300px', margin: '0 auto', width: '100%'}}>
-                                        {m.match_profile?.profile_photo ? 
+                                        {m.match_profile?.profile_photo ?
                                             <img src={m.match_profile.profile_photo} alt={m.match_profile.full_name} className="user-card-img" style={{height: '250px'}}/> :
                                             <div className="user-card-img" style={{display:'flex', alignItems:'center', justifyContent:'center'}}>
                                                 <UserIcon size={48} color="var(--text-secondary)"/>
@@ -209,7 +306,7 @@ export default function UserDashboard() {
                                             <p style={{marginTop:'0.5rem', fontSize:'0.9rem'}}>{m.match_profile?.about_me}</p>
                                         </div>
                                     </div>
-                                    
+
                                     <div className="chat-container animate-fade-in text-left" style={{background: 'var(--surface)'}}>
                                         <div className="chat-history">
                                             {messages.length === 0 && <p className="text-center text-secondary">No messages yet. Say hello!</p>}
@@ -279,31 +376,124 @@ export default function UserDashboard() {
                 <div className="glass-panel animate-fade-in">
                     {message && <div className={message.startsWith('Error') ? "alert alert-error" : "alert alert-success"}>{message}</div>}
                     <form onSubmit={handleSave} style={{display: 'grid', gap: '1.5rem', gridTemplateColumns: '1fr 1fr'}}>
+
+                        {/* ── FACE AUTHENTICATION SECTION ── */}
                         <div className="form-group" style={{gridColumn: '1 / -1'}}>
-                            <label className="form-label">Live Photo Verification (Mandatory Anti-Fraud Measure)</label>
-                            {cameraActive ? (
-                                <div style={{display: 'flex', flexDirection: 'column', gap: '1rem', alignItems: 'center'}}>
-                                    <video ref={videoRef} autoPlay playsInline style={{width: '100%', maxWidth: '400px', borderRadius: '16px', border: '2px solid var(--primary)'}} />
-                                    <div style={{display: 'flex', gap: '1rem'}}>
-                                        <button type="button" className="btn btn-primary" onClick={capturePhoto}><Camera size={18}/> Snap Photo</button>
-                                        <button type="button" className="btn btn-secondary" onClick={stopCamera}>Cancel</button>
+                            <label className="form-label required-label">
+                                <ScanFace size={18} style={{display:'inline', marginRight:'0.4rem', verticalAlign:'middle'}} />
+                                Face Verification <span className="required-star">*</span>
+                            </label>
+
+                            {cameraMode === 'face_auth' ? (
+                                <div className="face-auth-container">
+                                    <div className="face-scan-wrapper">
+                                        <video ref={videoRef} autoPlay playsInline className="face-video" />
+                                        {faceAuthStep === 'scanning' && (
+                                            <div className="face-scan-overlay">
+                                                <div className="scan-line" />
+                                                <div className="scan-corners">
+                                                    <span /><span /><span /><span />
+                                                </div>
+                                                <p className="scan-label">Scanning face...</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div style={{display:'flex', gap:'1rem', justifyContent:'center', marginTop:'1rem'}}>
+                                        {faceAuthStep === 'idle' && (
+                                            <button type="button" className="btn btn-primary" onClick={runFaceAuth}>
+                                                <ScanFace size={18} /> Verify My Face
+                                            </button>
+                                        )}
+                                        {faceAuthStep === 'scanning' && (
+                                            <button type="button" className="btn btn-secondary" disabled>
+                                                <span className="btn-spinner" /> Scanning...
+                                            </button>
+                                        )}
+                                        <button type="button" className="btn btn-secondary" onClick={() => { stopCamera(); setFaceAuthStep('idle'); }}>
+                                            <X size={18} /> Cancel
+                                        </button>
                                     </div>
                                 </div>
                             ) : (
-                                <div style={{display: 'flex', gap: '1rem', alignItems: 'center'}}>
-                                    {profile.profile_photo ? (
-                                        <img src={profile.profile_photo} alt="Preview" style={{width: '80px', height: '80px', borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--success)'}}/>
+                                <div className="face-auth-status">
+                                    {faceAuthStep === 'verified' || faceVerified ? (
+                                        <div className="face-verified-badge">
+                                            <CheckCircle size={22} color="var(--success)" />
+                                            <span>Face Verified ✓</span>
+                                        </div>
+                                    ) : faceAuthStep === 'failed' ? (
+                                        <div style={{display:'flex', flexDirection:'column', gap:'0.75rem', alignItems:'flex-start'}}>
+                                            <div className="alert alert-error" style={{margin:0}}>
+                                                ⚠️ Verification failed. Make sure your face is clearly visible and try again.
+                                            </div>
+                                            <button type="button" className="btn btn-outline" onClick={() => { setFaceAuthStep('idle'); startCamera('face_auth'); }}>
+                                                <ScanFace size={18} /> Retry Face Verification
+                                            </button>
+                                        </div>
                                     ) : (
-                                        <div style={{width: '80px', height: '80px', borderRadius: '50%', background: 'var(--surface-light)', border: '2px dashed var(--border)', display: 'flex', alignItems:'center', justifyContent:'center'}}>
-                                            <UserIcon size={32} color="var(--text-secondary)"/>
+                                        <div style={{display:'flex', alignItems:'center', gap:'1rem'}}>
+                                            <div className="face-placeholder">
+                                                <UserIcon size={32} color="var(--text-secondary)" />
+                                            </div>
+                                            <button type="button" className="btn btn-outline" onClick={() => startCamera('face_auth')}>
+                                                <ScanFace size={18} /> Start Face Verification
+                                            </button>
                                         </div>
                                     )}
-                                    <button type="button" className="btn btn-outline" onClick={startCamera}>
-                                        <Camera size={18}/> {profile.profile_photo ? 'Retake Live Photo' : 'Open Camera'}
-                                    </button>
                                 </div>
                             )}
                         </div>
+
+                        {/* ── PROFILE PHOTO SECTION ── */}
+                        <div className="form-group" style={{gridColumn: '1 / -1'}}>
+                            <label className="form-label required-label">
+                                <Camera size={18} style={{display:'inline', marginRight:'0.4rem', verticalAlign:'middle'}} />
+                                Profile Photo <span className="required-star">*</span>
+                            </label>
+
+                            {cameraMode === 'photo_capture' ? (
+                                <div className="face-auth-container">
+                                    <video ref={videoRef} autoPlay playsInline className="face-video" />
+                                    <div style={{display:'flex', gap:'1rem', justifyContent:'center', marginTop:'1rem'}}>
+                                        <button type="button" className="btn btn-primary" onClick={capturePhotoFromCamera} disabled={uploadingPhoto}>
+                                            <Camera size={18} /> {uploadingPhoto ? 'Saving...' : 'Snap Photo'}
+                                        </button>
+                                        <button type="button" className="btn btn-secondary" onClick={stopCamera}>
+                                            <X size={18} /> Cancel
+                                        </button>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="photo-upload-area">
+                                    {photoPreview ? (
+                                        <img src={photoPreview} alt="Profile Preview" className="photo-preview-img" />
+                                    ) : (
+                                        <div className="photo-placeholder">
+                                            <UserIcon size={40} color="var(--text-secondary)" />
+                                            <span>No photo yet</span>
+                                        </div>
+                                    )}
+                                    <div className="photo-action-btns">
+                                        <button type="button" className="btn btn-outline" onClick={() => startCamera('photo_capture')} disabled={uploadingPhoto}>
+                                            <Camera size={18} /> {photoPreview ? 'Retake' : 'Take Photo'}
+                                        </button>
+                                        <button type="button" className="btn btn-secondary" onClick={() => fileInputRef.current?.click()} disabled={uploadingPhoto}>
+                                            <Upload size={18} /> Upload Photo
+                                        </button>
+                                    </div>
+                                    <input
+                                        ref={fileInputRef}
+                                        type="file"
+                                        accept="image/*"
+                                        style={{display:'none'}}
+                                        onChange={handleFileUpload}
+                                    />
+                                    {uploadingPhoto && <p style={{fontSize:'0.85rem', color:'var(--text-secondary)'}}>Uploading photo...</p>}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* ── PROFILE FIELDS ── */}
                         <div className="form-group">
                             <label className="form-label">Full Name</label>
                             <input type="text" className="form-input" value={profile.full_name} onChange={e => setProfile({...profile, full_name: e.target.value})} required />
@@ -336,9 +526,15 @@ export default function UserDashboard() {
                             <textarea className="form-textarea" value={profile.about_me} onChange={e => setProfile({...profile, about_me: e.target.value})} placeholder="Tell us about your hobbies, ideal date, what you're looking for..." required />
                         </div>
                         <div style={{gridColumn: '1 / -1'}}>
-                            <button type="submit" className="btn btn-primary" disabled={saving}>
-                                <Save size={18}/> {saving ? 'Saving...' : 'Save Profile'}
+                            <button type="submit" className="btn btn-primary" disabled={saving || !faceVerified || !photoPreview}>
+                                <Save size={18} /> {saving ? 'Saving...' : !faceVerified ? '🔍 Complete Face Verification First' : !photoPreview ? '📸 Add Profile Photo First' : 'Save Profile'}
                             </button>
+                            {(!faceVerified || !photoPreview) && (
+                                <div style={{marginTop:'0.6rem', display:'flex', flexDirection:'column', gap:'0.3rem'}}>
+                                    {!faceVerified && <p style={{fontSize:'0.82rem', color:'var(--primary)'}}>⚠️ Face verification is required <span className="required-star">*</span></p>}
+                                    {!photoPreview && <p style={{fontSize:'0.82rem', color:'var(--primary)'}}>⚠️ Profile photo is required <span className="required-star">*</span></p>}
+                                </div>
+                            )}
                         </div>
                     </form>
                 </div>

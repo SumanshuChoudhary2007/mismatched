@@ -930,3 +930,467 @@ body {
   }
 }
 
+/* ─── Registration Counter Card ──────────────────────────────────────────── */
+.reg-counter-card {
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 1.25rem 1.5rem;
+  margin-top: 1.5rem;
+  width: 100%;
+  max-width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.reg-counter-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--text-secondary);
+}
+
+.live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--success);
+  margin-left: auto;
+  animation: pulse-live 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-live {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.7); }
+}
+
+.reg-gender-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.reg-gender-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.reg-gender-icon {
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.male-icon { color: #60a5fa; }
+.female-icon { color: #f472b6; }
+
+.reg-count {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  font-size: 0.85rem;
+}
+
+.reg-count.full { color: var(--primary); }
+
+.reg-progress-bar {
+  width: 100%;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.reg-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+.male-fill {
+  background: linear-gradient(90deg, #3b82f6, #60a5fa);
+}
+
+.male-fill.full {
+  background: linear-gradient(90deg, var(--primary), #FF8A00);
+}
+
+.female-fill {
+  background: linear-gradient(90deg, #ec4899, #f472b6);
+}
+
+.female-fill.full {
+  background: linear-gradient(90deg, var(--primary), #FF8A00);
+}
+
+.reg-full-badge {
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 1px;
+  color: var(--primary);
+  background: rgba(255, 46, 99, 0.12);
+  border: 1px solid rgba(255, 46, 99, 0.3);
+  padding: 0.15rem 0.5rem;
+  border-radius: 9999px;
+  text-transform: uppercase;
+}
+
+.reg-counter-note {
+  font-size: 0.73rem;
+  color: var(--text-secondary);
+  text-align: center;
+  margin-top: 0.25rem;
+  opacity: 0.7;
+}
+
+/* ─── Gender Toggle ──────────────────────────────────────────────────────── */
+.gender-toggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+.gender-toggle-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 1rem 0.75rem;
+  border-radius: 14px;
+  border: 2px solid var(--border);
+  background: rgba(0, 0, 0, 0.15);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.25s ease;
+  font-family: inherit;
+  font-size: 0.95rem;
+  font-weight: 600;
+  position: relative;
+}
+
+.gender-toggle-btn:hover:not(.full-disabled) {
+  border-color: rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.05);
+  color: white;
+}
+
+.gender-toggle-btn.active.male {
+  border-color: #60a5fa;
+  background: rgba(96, 165, 250, 0.12);
+  color: #93c5fd;
+  box-shadow: 0 0 20px rgba(96, 165, 250, 0.2);
+}
+
+.gender-toggle-btn.active.female {
+  border-color: #f472b6;
+  background: rgba(244, 114, 182, 0.12);
+  color: #fbcfe8;
+  box-shadow: 0 0 20px rgba(244, 114, 182, 0.2);
+}
+
+.gender-toggle-btn.full-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.gender-toggle-count {
+  font-size: 0.72rem;
+  font-weight: 700;
+  opacity: 0.7;
+  font-variant-numeric: tabular-nums;
+}
+
+.gender-full-tag {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  font-size: 0.55rem;
+  font-weight: 800;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--primary);
+  background: var(--background);
+  border: 1px solid rgba(255, 46, 99, 0.4);
+  padding: 0.1rem 0.4rem;
+  border-radius: 9999px;
+}
+
+/* ─── Face Authentication ────────────────────────────────────────────────── */
+.face-auth-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.face-scan-wrapper {
+  position: relative;
+  border-radius: 16px;
+  overflow: hidden;
+  border: 2px solid var(--primary);
+  box-shadow: 0 0 30px rgba(255, 46, 99, 0.3);
+  max-width: 380px;
+  width: 100%;
+}
+
+.face-video {
+  width: 100%;
+  max-width: 380px;
+  display: block;
+  border-radius: 14px;
+}
+
+.face-scan-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 14px;
+}
+
+.scan-line {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, transparent, var(--secondary), transparent);
+  animation: scan-move 2s linear infinite;
+  box-shadow: 0 0 12px var(--secondary);
+}
+
+@keyframes scan-move {
+  0% { top: 5%; }
+  50% { top: 90%; }
+  100% { top: 5%; }
+}
+
+.scan-corners {
+  position: absolute;
+  inset: 12px;
+}
+
+.scan-corners span {
+  position: absolute;
+  width: 24px;
+  height: 24px;
+  border-color: var(--secondary);
+  border-style: solid;
+}
+
+.scan-corners span:nth-child(1) { top: 0; left: 0; border-width: 3px 0 0 3px; border-radius: 4px 0 0 0; }
+.scan-corners span:nth-child(2) { top: 0; right: 0; border-width: 3px 3px 0 0; border-radius: 0 4px 0 0; }
+.scan-corners span:nth-child(3) { bottom: 0; left: 0; border-width: 0 0 3px 3px; border-radius: 0 0 0 4px; }
+.scan-corners span:nth-child(4) { bottom: 0; right: 0; border-width: 0 3px 3px 0; border-radius: 0 0 4px 0; }
+
+.scan-label {
+  color: var(--secondary);
+  font-weight: 700;
+  font-size: 0.95rem;
+  margin-top: 0.75rem;
+  letter-spacing: 0.5px;
+  text-shadow: 0 0 10px rgba(8, 217, 214, 0.8);
+}
+
+.face-auth-status {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.face-verified-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  background: rgba(0, 230, 118, 0.1);
+  border: 1px solid rgba(0, 230, 118, 0.3);
+  border-radius: 12px;
+  padding: 0.75rem 1.25rem;
+  color: var(--success);
+  font-weight: 700;
+  font-size: 1rem;
+}
+
+.face-placeholder {
+  width: 70px;
+  height: 70px;
+  border-radius: 50%;
+  background: var(--surface-light);
+  border: 2px dashed var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ─── Photo Upload ───────────────────────────────────────────────────────── */
+.photo-upload-area {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.photo-preview-img {
+  width: 90px;
+  height: 90px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 3px solid var(--success);
+  box-shadow: 0 0 20px rgba(0, 230, 118, 0.25);
+}
+
+.photo-placeholder {
+  width: 90px;
+  height: 90px;
+  border-radius: 50%;
+  background: var(--surface-light);
+  border: 2px dashed var(--border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+}
+
+.photo-placeholder span {
+  font-size: 0.65rem;
+  color: var(--text-secondary);
+}
+
+.photo-action-btns {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+/* ─── Responsive additions for new features ──────────────────────────────── */
+@media (max-width: 768px) {
+  .reg-counter-card { max-width: 100%; }
+  .gender-toggle { gap: 0.6rem; }
+  .gender-toggle-btn { padding: 0.85rem 0.5rem; font-size: 0.9rem; }
+  .face-video { max-width: 100%; }
+  .face-scan-wrapper { max-width: 100%; }
+  .photo-upload-area { flex-direction: column; align-items: flex-start; }
+}
+
+/* ─── Required Field Markers ─────────────────────────────────────────────── */
+.required-star {
+  color: var(--primary);
+  font-weight: 800;
+  margin-left: 2px;
+  font-size: 1rem;
+  vertical-align: middle;
+  line-height: 1;
+}
+
+.required-label {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+/* ─── Registration Closed Full Screen ───────────────────────────────────── */
+.reg-closed-icon {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 1.5rem;
+  opacity: 0.9;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.reg-closed-stats {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2rem;
+  margin: 1.5rem 0 2rem;
+  padding: 1.5rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+}
+
+.reg-closed-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.reg-closed-num {
+  font-size: 3rem;
+  font-weight: 800;
+  letter-spacing: -2px;
+  line-height: 1;
+}
+
+.reg-closed-num.male-icon {
+  color: #60a5fa;
+  -webkit-text-fill-color: #60a5fa;
+  background: none;
+  -webkit-background-clip: unset;
+  background-clip: unset;
+}
+
+.reg-closed-num.female-icon {
+  color: #f472b6;
+  -webkit-text-fill-color: #f472b6;
+  background: none;
+  -webkit-background-clip: unset;
+  background-clip: unset;
+}
+
+.reg-closed-label {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+}
+
+.reg-closed-divider {
+  width: 1px;
+  height: 60px;
+  background: var(--border);
+}
+
+/* ─── Blocked Gender Banner ─────────────────────────────────────────────── */
+.reg-blocked-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  background: rgba(255, 46, 99, 0.08);
+  border: 1px solid rgba(255, 46, 99, 0.3);
+  border-radius: 14px;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.25rem;
+}
+
+.reg-blocked-banner strong {
+  display: block;
+  color: #fda4af;
+  font-size: 1rem;
+  margin-bottom: 0.25rem;
+}
+
+.reg-blocked-banner p {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+@media (max-width: 768px) {
+  .reg-closed-stats { gap: 1.5rem; }
+  .reg-closed-num { font-size: 2.4rem; }
+}

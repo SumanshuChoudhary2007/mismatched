@@ -90,7 +90,7 @@ app.get('/api/admin/all-matches', authenticateUser, isAdmin, async (req, res) =>
 });
 
 app.post('/api/admin/match', authenticateUser, isAdmin, async (req, res) => {
-  const { user1_id, user2_id } = req.body;
+  const { user1_id, user2_id, compatibility_score = 0 } = req.body;
   if (user1_id === user2_id) return res.status(400).json({ error: 'Cannot match user with themselves' });
   
   const { data: u1 } = await supabase.from('profiles').select('full_name').eq('id', user1_id).single();
@@ -100,7 +100,8 @@ app.post('/api/admin/match', authenticateUser, isAdmin, async (req, res) => {
     user1_id, 
     user2_id,
     user1_name: u1?.full_name || 'Unknown',
-    user2_name: u2?.full_name || 'Unknown'
+    user2_name: u2?.full_name || 'Unknown',
+    compatibility_score   // ← persist score so users can see it in dashboard
   }]).select();
   
   if (error) return res.status(400).json({ error: error.message });
@@ -134,9 +135,11 @@ app.post('/api/matches/:match_id/messages', authenticateUser, async (req, res) =
   const { data: match, error: matchError } = await supabase.from('matches').select('*').eq('id', match_id).single();
   if (matchError || (match.user1_id !== req.user.id && match.user2_id !== req.user.id)) return res.status(403).json({ error: 'Access denied' });
 
-  // Check message limit
-  const { count } = await supabase.from('messages').select('*', { count: 'exact', head: true }).eq('match_id', match_id);
-  if (count >= 6) return res.status(400).json({ error: 'Message limit reached for this match (Maximum 6)' });
+  // Check per-user message limit (10 messages each)
+  const { count } = await supabase.from('messages').select('*', { count: 'exact', head: true })
+    .eq('match_id', match_id)
+    .eq('sender_id', req.user.id);  // ← count only THIS user's messages
+  if (count >= 10) return res.status(400).json({ error: 'Message limit reached — you have used all 10 messages.' });
 
   const { data, error } = await supabase.from('messages').insert([{
     match_id,
@@ -144,6 +147,38 @@ app.post('/api/matches/:match_id/messages', authenticateUser, async (req, res) =
     content
   }]).select('*, sender:profiles(full_name)').single();
   
+  if (error) return res.status(400).json({ error: error.message });
+  res.json(data);
+});
+
+// Share a once-only meeting location (allowed even after 6-message limit)
+app.post('/api/matches/:match_id/share-location', authenticateUser, async (req, res) => {
+  const { match_id } = req.params;
+  const { location } = req.body;
+  if (!location?.trim()) return res.status(400).json({ error: 'Location is required' });
+
+  // Verify user is in this match
+  const { data: match, error: matchError } = await supabase
+    .from('matches').select('*').eq('id', match_id).single();
+  if (matchError || (match.user1_id !== req.user.id && match.user2_id !== req.user.id))
+    return res.status(403).json({ error: 'Access denied' });
+
+  // Enforce one-shot rule
+  if (match.location_shared)
+    return res.status(400).json({ error: 'Location has already been shared for this match.' });
+
+  // Mark as shared
+  const { error: updateError } = await supabase
+    .from('matches').update({ location_shared: true }).eq('id', match_id);
+  if (updateError) return res.status(500).json({ error: updateError.message });
+
+  // Insert location message (bypasses per-user 10-message limit)
+  const { data, error } = await supabase.from('messages').insert([{
+    match_id,
+    sender_id: req.user.id,
+    content: `📍 Meet me here: ${location.trim()}`
+  }]).select('*, sender:profiles(full_name)').single();
+
   if (error) return res.status(400).json({ error: error.message });
   res.json(data);
 });

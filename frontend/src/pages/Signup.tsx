@@ -4,16 +4,32 @@ import { supabase } from '../lib/supabase';
 import { getRegistrationCounts } from '../lib/api';
 import { Sparkles, Mail, Lock, ArrowRight, Users, User, XCircle, AlertTriangle } from 'lucide-react';
 
-const LIMIT = 50;
+const LIMIT = 20;
+
+// ── Math CAPTCHA generator ──────────────────────────────────────────────────
+const generateCaptcha = () => {
+    const ops = ['+', '-', '×'] as const;
+    const op = ops[Math.floor(Math.random() * ops.length)];
+    let a = Math.floor(Math.random() * 9) + 1;
+    let b = Math.floor(Math.random() * 9) + 1;
+    if (op === '-' && b > a) [a, b] = [b, a];  // keep result ≥ 0
+    const answer = op === '+' ? a + b : op === '-' ? a - b : a * b;
+    return { question: `${a} ${op} ${b}`, answer };
+};
 
 export default function Signup() {
     const [email, setEmail] = useState('');
+    const [honeypot, setHoneypot] = useState(''); // hidden anti-bot field
     const [password, setPassword] = useState('');
     const [gender, setGender] = useState<'male' | 'female'>('male');
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
     const [counts, setCounts] = useState<{ male_count: number; female_count: number }>({ male_count: 0, female_count: 0 });
     const [countsLoading, setCountsLoading] = useState(true);
+    // CAPTCHA state
+    const [captcha, setCaptcha] = useState(generateCaptcha);
+    const [captchaInput, setCaptchaInput] = useState('');
+    const [captchaError, setCaptchaError] = useState(false);
     const navigate = useNavigate();
 
     // Load and refresh counts every 10 seconds
@@ -40,6 +56,16 @@ export default function Signup() {
 
     const handleSignup = async (e: React.FormEvent) => {
         e.preventDefault();
+        // Honeypot check — bots fill hidden fields, real users don't
+        if (honeypot) { setLoading(false); return; }
+        // Math CAPTCHA validation
+        if (parseInt(captchaInput, 10) !== captcha.answer) {
+            setCaptchaError(true);
+            setCaptcha(generateCaptcha());  // refresh question on failure
+            setCaptchaInput('');
+            return;
+        }
+        setCaptchaError(false);
         setLoading(true);
         setError('');
 
@@ -254,6 +280,17 @@ export default function Signup() {
                     )}
 
                     <form onSubmit={handleSignup} className="auth-form">
+                        {/* Honeypot anti-bot field — hidden from real users */}
+                        <input
+                            type="text"
+                            name="nickname"
+                            value={honeypot}
+                            onChange={(e) => setHoneypot(e.target.value)}
+                            tabIndex={-1}
+                            autoComplete="off"
+                            aria-hidden="true"
+                            style={{ position: 'absolute', left: '-9999px', opacity: 0, height: 0, width: 0, overflow: 'hidden' }}
+                        />
                         {/* Gender Selection */}
                         <div className="form-group">
                             <label className="form-label">I am a...</label>
@@ -317,6 +354,38 @@ export default function Signup() {
                                 />
                             </div>
                             <p className="form-hint">Use at least 6 characters for a secure password</p>
+                        </div>
+
+                        {/* ── Math CAPTCHA ───────────────────────────────── */}
+                        <div className="form-group captcha-group">
+                            <label className="form-label">
+                                Human Verification
+                            </label>
+                            <div className="captcha-box">
+                                <div className="captcha-question">
+                                    <span className="captcha-q-text">What is <strong>{captcha.question}</strong> ?</span>
+                                    <button
+                                        type="button"
+                                        className="captcha-refresh"
+                                        onClick={() => { setCaptcha(generateCaptcha()); setCaptchaInput(''); setCaptchaError(false); }}
+                                        title="New question"
+                                        aria-label="Refresh CAPTCHA"
+                                    >↻</button>
+                                </div>
+                                <input
+                                    type="number"
+                                    className={`form-input captcha-input${captchaError ? ' captcha-input--error' : ''}`}
+                                    placeholder="Your answer"
+                                    value={captchaInput}
+                                    onChange={e => { setCaptchaInput(e.target.value); setCaptchaError(false); }}
+                                    required
+                                    autoComplete="off"
+                                    disabled={selectedGenderFull}
+                                />
+                            </div>
+                            {captchaError && (
+                                <p className="captcha-error-msg">❌ Wrong answer — try the new question</p>
+                            )}
                         </div>
 
                         <button

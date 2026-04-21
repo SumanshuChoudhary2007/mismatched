@@ -83,7 +83,7 @@ export const getAdminMatches = async () => {
     return enriched;
 };
 
-export const createMatch = async (user1_id: string, user2_id: string) => {
+export const createMatch = async (user1_id: string, user2_id: string, compatibility_score = 0) => {
     if (user1_id === user2_id) throw new Error('Cannot match user with themselves');
 
     const { data: u1 } = await supabase.from('profiles').select('full_name').eq('id', user1_id).single();
@@ -93,7 +93,8 @@ export const createMatch = async (user1_id: string, user2_id: string) => {
         user1_id,
         user2_id,
         user1_name: u1?.full_name || 'Unknown',
-        user2_name: u2?.full_name || 'Unknown'
+        user2_name: u2?.full_name || 'Unknown',
+        compatibility_score
     }]).select();
 
     if (error) throw new Error(error.message);
@@ -146,7 +147,7 @@ export const markLocationShared = async (match_id: string, location: string) => 
     if (updateError) throw new Error('Failed to mark location as shared: ' + updateError.message);
     if (!updated || updated.location_shared !== true) throw new Error('Could not lock location sharing. Please try again.');
 
-    // Insert location as a special message (bypasses the 6-message limit)
+    // Insert location as a special message (bypasses the per-user 10-message limit)
     const { data, error } = await supabase
         .from('messages')
         .insert([{ match_id, sender_id: user.id, content: `📍 Meet me here: ${location}` }])
@@ -182,13 +183,14 @@ export const sendMessage = async (match_id: string, content: string) => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
-    // Check message limit
+    // Check per-user message limit — count only THIS user's sent messages
     const { count } = await supabase
         .from('messages')
         .select('*', { count: 'exact', head: true })
-        .eq('match_id', match_id);
+        .eq('match_id', match_id)
+        .eq('sender_id', user.id);   // ← only my messages
 
-    if ((count || 0) >= 6) throw new Error('Message limit reached for this match (Maximum 6)');
+    if ((count || 0) >= 10) throw new Error('You have used all 10 messages for this match.');
 
     const { data, error } = await supabase
         .from('messages')

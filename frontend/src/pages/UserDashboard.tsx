@@ -4,7 +4,9 @@ import { supabase } from '../lib/supabase';
 import { getProfile, updateProfile, getMyMatches, getMessages, sendMessage, markLocationShared, uploadProfilePhoto, reportUser } from '../lib/api';
 import * as faceapi from 'face-api.js';
 
-import { Camera, LogOut, Save, User as UserIcon, Send, MapPin, Upload, CheckCircle, ScanFace, X, MessageSquare, AlertTriangle } from 'lucide-react';
+import { Camera as LucideCamera, LogOut, Save, User as UserIcon, Send, MapPin, Upload, CheckCircle, ScanFace, X, MessageSquare, AlertTriangle } from 'lucide-react';
+import { Camera as CapacitorCamera } from '@capacitor/camera';
+import { Capacitor } from '@capacitor/core';
 
 // ── Prompt definitions ────────────────────────────────────────────────────────
 const PROMPTS = [
@@ -98,7 +100,7 @@ export default function UserDashboard() {
     const [uploadingPhoto, setUploadingPhoto] = useState(false);
     const [photoPreview, setPhotoPreview] = useState('');
     const [modelsLoaded, setModelsLoaded] = useState(false);
-
+    const [modelError, setModelError] = useState('');
     const videoRef = useRef<HTMLVideoElement>(null);
     const streamRef = useRef<MediaStream | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -115,8 +117,9 @@ export default function UserDashboard() {
                     faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
                 ]);
                 setModelsLoaded(true);
-            } catch (e) {
+            } catch (e: any) {
                 console.error('Failed to load face-api models', e);
+                setModelError('Failed to load face recognition models: ' + e.message);
             }
         };
         loadModels();
@@ -263,6 +266,16 @@ export default function UserDashboard() {
     // ─── Camera helpers ───────────────────────────────────────────────────────
     const startCamera = async (mode: 'face_auth' | 'photo_capture') => {
         try {
+            if (Capacitor.isNativePlatform()) {
+                const status = await CapacitorCamera.checkPermissions();
+                if (status.camera !== 'granted') {
+                    const requestStatus = await CapacitorCamera.requestPermissions({ permissions: ['camera'] });
+                    if (requestStatus.camera !== 'granted') {
+                        alert('Camera permission is required to use this feature.');
+                        return;
+                    }
+                }
+            }
             const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
             streamRef.current = stream;
             setCameraMode(mode);
@@ -295,7 +308,9 @@ export default function UserDashboard() {
         try {
             // ── 1. Get descriptor from profile photo ──────────────────
             const profileImg = new Image();
-            profileImg.crossOrigin = 'anonymous';
+            if (!photoPreview.startsWith('blob:')) {
+                profileImg.crossOrigin = 'anonymous';
+            }
             await new Promise<void>((resolve, reject) => {
                 profileImg.onload = () => resolve();
                 profileImg.onerror = () => reject(new Error('Could not load profile photo for comparison.'));
@@ -315,6 +330,14 @@ export default function UserDashboard() {
             }
 
             // ── 2. Get descriptor from live camera selfie ─────────────
+            // Ensure video is playing and has dimensions
+            if (videoRef.current.readyState < 2) {
+                await new Promise(resolve => {
+                    if (videoRef.current) videoRef.current.onloadeddata = resolve;
+                    else resolve(null);
+                });
+            }
+
             const selfieDetection = await faceapi
                 .detectSingleFace(videoRef.current, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.4 }))
                 .withFaceLandmarks()
@@ -699,10 +722,16 @@ export default function UserDashboard() {
                                         Loading face recognition models...
                                     </div>
                                 )}
+                                {modelError && (
+                                    <div className="alert alert-error" style={{ marginBottom: '1rem', fontSize: '0.85rem' }}>
+                                        <AlertTriangle size={16} style={{ marginRight: '0.5rem' }} />
+                                        {modelError}
+                                    </div>
+                                )}
                                 {cameraMode === 'face_auth' ? (
                                     <div className="face-auth-container">
                                         <div className="face-scan-wrapper">
-                                            <video ref={videoRef} autoPlay playsInline className="face-video" />
+                                            <video ref={videoRef} autoPlay playsInline muted className="face-video" />
                                             {faceAuthStep === 'scanning' && (
                                                 <div className="face-scan-overlay">
                                                     <div className="scan-line" />
@@ -758,14 +787,14 @@ export default function UserDashboard() {
                             {/* ── PROFILE PHOTO ── */}
                             <div className="form-group" style={{ gridColumn: '1 / -1' }}>
                                 <label className="form-label required-label">
-                                    <Camera size={18} style={{ display: 'inline', marginRight: '0.4rem', verticalAlign: 'middle' }} />
+                                    <LucideCamera size={18} style={{ display: 'inline', marginRight: '0.4rem', verticalAlign: 'middle' }} />
                                     Profile Photo <span className="required-star">*</span>
                                 </label>
                                 {cameraMode === 'photo_capture' ? (
                                     <div className="face-auth-container">
-                                        <video ref={videoRef} autoPlay playsInline className="face-video" />
+                                        <video ref={videoRef} autoPlay playsInline muted className="face-video" />
                                         <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', marginTop: '1rem' }}>
-                                            <button type="button" className="btn btn-primary" onClick={capturePhotoFromCamera} disabled={uploadingPhoto}><Camera size={18} /> {uploadingPhoto ? 'Saving...' : 'Snap Photo'}</button>
+                                            <button type="button" className="btn btn-primary" onClick={capturePhotoFromCamera} disabled={uploadingPhoto}><LucideCamera size={18} /> {uploadingPhoto ? 'Saving...' : 'Snap Photo'}</button>
                                             <button type="button" className="btn btn-secondary" onClick={stopCamera}><X size={18} /> Cancel</button>
                                         </div>
                                     </div>
@@ -775,7 +804,7 @@ export default function UserDashboard() {
                                             <div className="photo-placeholder"><UserIcon size={40} color="var(--text-secondary)" /><span>No photo yet</span></div>
                                         )}
                                         <div className="photo-action-btns">
-                                            <button type="button" className="btn btn-outline" onClick={() => startCamera('photo_capture')} disabled={uploadingPhoto}><Camera size={18} /> {photoPreview ? 'Retake' : 'Take Photo'}</button>
+                                            <button type="button" className="btn btn-outline" onClick={() => startCamera('photo_capture')} disabled={uploadingPhoto}><LucideCamera size={18} /> {photoPreview ? 'Retake' : 'Take Photo'}</button>
                                             <button type="button" className="btn btn-secondary" onClick={() => fileInputRef.current?.click()} disabled={uploadingPhoto}><Upload size={18} /> Upload Photo</button>
                                         </div>
                                         <input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleFileUpload} />

@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { getProfile, updateProfile, getMyMatches, getMessages, sendMessage, markLocationShared, uploadProfilePhoto } from '../lib/api';
+import { getProfile, updateProfile, getMyMatches, getMessages, sendMessage, markLocationShared, uploadProfilePhoto, reportUser } from '../lib/api';
+import * as faceapi from 'face-api.js';
 
-import { Camera, LogOut, Save, User as UserIcon, Heart, Send, MapPin, Upload, CheckCircle, ScanFace, X, MessageSquare } from 'lucide-react';
+import { Camera, LogOut, Save, User as UserIcon, Send, MapPin, Upload, CheckCircle, ScanFace, X, MessageSquare, AlertTriangle } from 'lucide-react';
 
 // ── Prompt definitions ────────────────────────────────────────────────────────
 const PROMPTS = [
@@ -93,18 +94,32 @@ export default function UserDashboard() {
     const [cameraMode, setCameraMode] = useState<null | 'face_auth' | 'photo_capture'>(null);
     const [faceVerified, setFaceVerified] = useState(false);
     const [faceAuthStep, setFaceAuthStep] = useState<'idle' | 'scanning' | 'verified' | 'failed'>('idle');
+    const [faceAuthError, setFaceAuthError] = useState('');
     const [uploadingPhoto, setUploadingPhoto] = useState(false);
     const [photoPreview, setPhotoPreview] = useState('');
-
-
+    const [modelsLoaded, setModelsLoaded] = useState(false);
 
     const videoRef = useRef<HTMLVideoElement>(null);
     const streamRef = useRef<MediaStream | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
-    // Clean up camera on unmount
+    // Load face-api models once on mount
     useEffect(() => {
+        const loadModels = async () => {
+            const MODEL_URL = '/models';
+            try {
+                await Promise.all([
+                    faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL),
+                    faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+                    faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
+                ]);
+                setModelsLoaded(true);
+            } catch (e) {
+                console.error('Failed to load face-api models', e);
+            }
+        };
+        loadModels();
         return () => { stopCamera(); };
     }, []);
 
@@ -187,9 +202,20 @@ export default function UserDashboard() {
         setSaving(false);
     };
 
+    // Word-count helper
+    const countWords = (text: string) => text.trim() === '' ? 0 : text.trim().split(/\s+/).length;
+    const MAX_WORDS = 30;
+    const chatWordCount = countWords(chatInput);
+    const chatOverLimit = chatWordCount > MAX_WORDS;
+
     const handleSendMessage = async (e: React.FormEvent, match_id: string) => {
         e.preventDefault();
         if (!chatInput.trim() || sending) return;
+        // Enforce 30-word limit
+        if (chatOverLimit) {
+            alert(`Message too long! Max ${MAX_WORDS} words. You used ${chatWordCount}.`);
+            return;
+        }
         setSending(true);
         const optimistic = {
             id: `temp-${Date.now()}`,
@@ -255,24 +281,82 @@ export default function UserDashboard() {
     };
 
     const runFaceAuth = async () => {
-        if (!videoRef.current) return;
+        if (!videoRef.current || !modelsLoaded) return;
+        if (!photoPreview) {
+            setFaceAuthError('⚠️ Please upload your profile photo first, then verify your face.');
+            setFaceAuthStep('failed');
+            stopCamera();
+            return;
+        }
+
         setFaceAuthStep('scanning');
-        await new Promise(r => setTimeout(r, 2000));
-        const canvas = document.createElement('canvas');
-        canvas.width = videoRef.current.videoWidth;
-        canvas.height = videoRef.current.videoHeight;
-        canvas.getContext('2d')?.drawImage(videoRef.current, 0, 0);
-        const ctx = canvas.getContext('2d')!;
-        const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const hasContent = imgData.data.some((v, i) => i % 4 !== 3 && v > 30);
-        if (!hasContent) { setFaceAuthStep('failed'); stopCamera(); return; }
-        setFaceAuthStep('verified');
-        setFaceVerified(true);
-        stopCamera();
+        setFaceAuthError('');
+
         try {
-            const { data: { user } } = await supabase.auth.getUser();
-            if (user) await supabase.from('profiles').update({ face_verified: true }).eq('id', user.id);
-        } catch (e) { /* non-blocking */ }
+            // ── 1. Get descriptor from profile photo ──────────────────
+            const profileImg = new Image();
+            profileImg.crossOrigin = 'anonymous';
+            await new Promise<void>((resolve, reject) => {
+                profileImg.onload = () => resolve();
+                profileImg.onerror = () => reject(new Error('Could not load profile photo for comparison.'));
+                profileImg.src = photoPreview;
+            });
+
+            const profileDetection = await faceapi
+                .detectSingleFace(profileImg, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.4 }))
+                .withFaceLandmarks()
+                .withFaceDescriptor();
+
+            if (!profileDetection) {
+                setFaceAuthError('❌ No face detected in your profile photo. Please upload a clear photo showing your face.');
+                setFaceAuthStep('failed');
+                stopCamera();
+                return;
+            }
+
+            // ── 2. Get descriptor from live camera selfie ─────────────
+            const selfieDetection = await faceapi
+                .detectSingleFace(videoRef.current, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.4 }))
+                .withFaceLandmarks()
+                .withFaceDescriptor();
+
+            if (!selfieDetection) {
+                setFaceAuthError('❌ No face detected in camera. Look directly at the camera and ensure good lighting.');
+                setFaceAuthStep('failed');
+                stopCamera();
+                return;
+            }
+
+            // ── 3. Compare descriptors (Euclidean distance) ───────────
+            // Distance < 0.55 = same person  |  >= 0.55 = different person
+            const distance = faceapi.euclideanDistance(
+                profileDetection.descriptor,
+                selfieDetection.descriptor
+            );
+
+            console.log('[FaceAuth] Distance:', distance);
+
+            if (distance > 0.55) {
+                setFaceAuthError(`❌ Face does not match your profile photo (distance: ${distance.toFixed(2)}). Make sure YOU are in the profile photo and looking at the camera.`);
+                setFaceAuthStep('failed');
+                stopCamera();
+                return;
+            }
+
+            // ── 4. Match confirmed ────────────────────────────────────
+            setFaceAuthStep('verified');
+            setFaceVerified(true);
+            stopCamera();
+            try {
+                const { data: { user } } = await supabase.auth.getUser();
+                if (user) await supabase.from('profiles').update({ face_verified: true }).eq('id', user.id);
+            } catch (e) { /* non-blocking */ }
+
+        } catch (err: any) {
+            setFaceAuthError('❌ Verification error: ' + err.message);
+            setFaceAuthStep('failed');
+            stopCamera();
+        }
     };
 
     const capturePhotoFromCamera = async () => {
@@ -295,6 +379,15 @@ export default function UserDashboard() {
                     setPhotoPreview(dataUrl);
                     setProfile(p => ({ ...p, profile_photo: dataUrl }));
                 }
+                // New photo → must re-verify face
+                setFaceVerified(false);
+                setFaceAuthStep('idle');
+                setFaceAuthError('');
+                // Reset in DB too
+                try {
+                    const { data: { user } } = await supabase.auth.getUser();
+                    if (user) await supabase.from('profiles').update({ face_verified: false }).eq('id', user.id);
+                } catch { /* non-blocking */ }
                 setUploadingPhoto(false);
             }, 'image/jpeg', 0.85);
         } catch (err: any) { alert('Error capturing photo: ' + err.message); setUploadingPhoto(false); }
@@ -303,26 +396,60 @@ export default function UserDashboard() {
     const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file || !userId) return;
+
+        // ── Step 1: Show instant local preview (no waiting for upload) ──────
+        const localUrl = URL.createObjectURL(file);
+        setPhotoPreview(localUrl);
+        setProfile(p => ({ ...p, profile_photo: localUrl }));
+
+        // ── Step 2: Reset face verification immediately ──────────────────────
+        setFaceVerified(false);
+        setFaceAuthStep('idle');
+        setFaceAuthError('');
+
+        // ── Step 3: Clear input via ref so another file can be picked ────────
+        if (fileInputRef.current) fileInputRef.current.value = '';
+
+        // ── Step 4: Upload to Supabase in background, swap URL when done ─────
         setUploadingPhoto(true);
         try {
             const url = await uploadProfilePhoto(file, userId);
+            // Revoke the temporary blob URL to free memory
+            URL.revokeObjectURL(localUrl);
             setPhotoPreview(url);
             setProfile(p => ({ ...p, profile_photo: url }));
-        } catch {
-            const reader = new FileReader();
-            reader.onload = (ev) => {
-                const dataUrl = ev.target?.result as string;
-                setPhotoPreview(dataUrl);
-                setProfile(p => ({ ...p, profile_photo: dataUrl }));
-            };
-            reader.readAsDataURL(file);
+        } catch (err: any) {
+            // Keep the local preview — upload failed but user still sees the image
+            console.warn('Supabase upload failed, using local preview:', err.message);
         }
+
+        // ── Step 5: Reset face_verified in DB (non-blocking) ─────────────────
+        try {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) await supabase.from('profiles').update({ face_verified: false }).eq('id', user.id);
+        } catch { /* non-blocking */ }
+
         setUploadingPhoto(false);
     };
 
 
 
+
     const handleLogout = async () => { await supabase.auth.signOut(); navigate('/'); };
+
+    const handleReportMatch = async (reportedId: string, matchId: string) => {
+        const reason = window.prompt("Why are you reporting this user? (This will hide them until admin review)");
+        if (!reason || !reason.trim()) return;
+        
+        try {
+            await reportUser(reportedId, matchId, reason.trim());
+            // Immediately hide from local state so user doesn't see them anymore
+            setMatches(prev => prev.filter(m => m.id !== matchId));
+            setMessage("Report submitted successfully. The user is now under admin review.");
+        } catch (e: any) {
+            setMessage("Error reporting user: " + e.message);
+        }
+    };
 
     const updatePromptAnswer = (id: string, answer: string) => {
         setProfile(p => ({
@@ -361,10 +488,19 @@ export default function UserDashboard() {
                 {/* ── MATCH FOUND STATE ──────────────────────────────────────── */}
                 {currentMatch && (
                     <div className="match-status-banner animate-fade-in">
-                        <div className="match-banner-top">
+                        <div className="match-banner-top" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
                             <div className="match-sparkle">✨</div>
-                            <h3>You've been matched!</h3>
-                            <p>Our experts found someone special for you. Chat to reveal their photo.</p>
+                            <div style={{ flex: 1 }}>
+                                <h3 style={{ margin: 0 }}>You've been matched!</h3>
+                                <p style={{ margin: '0.2rem 0 0' }}>Our experts found someone special for you. Chat to reveal their photo.</p>
+                            </div>
+                            <button 
+                                className="btn btn-secondary" 
+                                style={{ padding: '0.4rem 0.8rem', color: 'var(--primary)', background: 'rgba(255,46,99,0.1)', borderColor: 'rgba(255,46,99,0.2)', fontSize: '0.85rem' }} 
+                                onClick={() => handleReportMatch(currentMatch.user1_id === userId ? currentMatch.user2_id : currentMatch.user1_id, currentMatch.id)}
+                            >
+                                <AlertTriangle size={14} style={{ marginRight: '0.3rem' }} /> Report
+                            </button>
                         </div>
 
                         <div className="match-reveal-layout">
@@ -479,22 +615,35 @@ export default function UserDashboard() {
                                             </div>
                                         </div>
                                     ) : (
-                                        <form className="chat-input-area" onSubmit={(e) => handleSendMessage(e, currentMatch.id)}>
-                                            <button type="button" className="btn btn-secondary" style={{ padding: '0.75rem', borderRadius: '50%' }} onClick={(e) => handleDropLocation(e, currentMatch.id)} title="Drop Location">
-                                                <MapPin size={18} />
-                                            </button>
-                                            <input
-                                                type="text"
-                                                placeholder={`Say something... (${10 - myMsgCount} left)`}
-                                                value={chatInput}
-                                                onChange={e => setChatInput(e.target.value)}
-                                                maxLength={150}
-                                                disabled={sending}
-                                            />
-                                            <button type="submit" className="btn btn-primary" style={{ padding: '0.75rem 1.25rem' }} disabled={sending || !chatInput.trim()}>
-                                                <Send size={18} />
-                                            </button>
-                                        </form>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                                            <form className="chat-input-area" onSubmit={(e) => handleSendMessage(e, currentMatch.id)}>
+                                                <button type="button" className="btn btn-secondary" style={{ padding: '0.75rem', borderRadius: '50%' }} onClick={(e) => handleDropLocation(e, currentMatch.id)} title="Drop Location">
+                                                    <MapPin size={18} />
+                                                </button>
+                                                <input
+                                                    type="text"
+                                                    placeholder={`Say something... (${10 - myMsgCount} msgs left)`}
+                                                    value={chatInput}
+                                                    onChange={e => setChatInput(e.target.value)}
+                                                    disabled={sending}
+                                                    style={chatOverLimit ? { borderColor: 'var(--primary)', boxShadow: '0 0 0 2px rgba(255,46,99,0.2)' } : {}}
+                                                />
+                                                <button type="submit" className="btn btn-primary" style={{ padding: '0.75rem 1.25rem' }} disabled={sending || !chatInput.trim() || chatOverLimit}>
+                                                    <Send size={18} />
+                                                </button>
+                                            </form>
+                                            {/* Word counter */}
+                                            <div style={{ display: 'flex', justifyContent: 'flex-end', paddingRight: '0.25rem' }}>
+                                                <span style={{
+                                                    fontSize: '0.75rem',
+                                                    fontWeight: 600,
+                                                    color: chatOverLimit ? 'var(--primary)' : chatWordCount > 24 ? '#f59e0b' : 'var(--text-secondary)',
+                                                    transition: 'color 0.2s'
+                                                }}>
+                                                    {chatWordCount}/{MAX_WORDS} words{chatOverLimit ? ' — too long!' : ''}
+                                                </span>
+                                            </div>
+                                        </div>
                                     )}
                                 </div>
                             </div>
@@ -543,6 +692,12 @@ export default function UserDashboard() {
                                     <ScanFace size={18} style={{ display: 'inline', marginRight: '0.4rem', verticalAlign: 'middle' }} />
                                     Face Verification <span className="required-star">*</span>
                                 </label>
+                                {!modelsLoaded && (
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '0.5rem' }}>
+                                        <span className="btn-spinner" style={{ width: 14, height: 14, border: '2px solid var(--text-secondary)', borderTopColor: 'transparent' }} />
+                                        Loading face recognition models...
+                                    </div>
+                                )}
                                 {cameraMode === 'face_auth' ? (
                                     <div className="face-auth-container">
                                         <div className="face-scan-wrapper">
@@ -551,29 +706,48 @@ export default function UserDashboard() {
                                                 <div className="face-scan-overlay">
                                                     <div className="scan-line" />
                                                     <div className="scan-corners"><span /><span /><span /><span /></div>
-                                                    <p className="scan-label">Scanning face...</p>
+                                                    <p className="scan-label">Comparing faces...</p>
                                                 </div>
                                             )}
                                         </div>
-                                        <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', marginTop: '1rem' }}>
-                                            {faceAuthStep === 'idle' && <button type="button" className="btn btn-primary" onClick={runFaceAuth}><ScanFace size={18} /> Verify My Face</button>}
-                                            {faceAuthStep === 'scanning' && <button type="button" className="btn btn-secondary" disabled><span className="btn-spinner" /> Scanning...</button>}
-                                            <button type="button" className="btn btn-secondary" onClick={() => { stopCamera(); setFaceAuthStep('idle'); }}><X size={18} /> Cancel</button>
+                                        <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', textAlign: 'center', marginTop: '0.5rem' }}>
+                                            📸 Look directly at the camera in good lighting
+                                        </p>
+                                        <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', marginTop: '0.75rem' }}>
+                                            {faceAuthStep === 'idle' && (
+                                                <button type="button" className="btn btn-primary" onClick={runFaceAuth} disabled={!modelsLoaded || !photoPreview}>
+                                                    <ScanFace size={18} /> {!photoPreview ? 'Upload Photo First' : 'Match My Face'}
+                                                </button>
+                                            )}
+                                            {faceAuthStep === 'scanning' && <button type="button" className="btn btn-secondary" disabled><span className="btn-spinner" /> Analyzing...</button>}
+                                            <button type="button" className="btn btn-secondary" onClick={() => { stopCamera(); setFaceAuthStep('idle'); setFaceAuthError(''); }}><X size={18} /> Cancel</button>
                                         </div>
                                     </div>
                                 ) : (
                                     <div className="face-auth-status">
                                         {faceAuthStep === 'verified' || faceVerified ? (
-                                            <div className="face-verified-badge"><CheckCircle size={22} color="var(--success)" /><span>Face Verified ✓</span></div>
+                                            <div className="face-verified-badge"><CheckCircle size={22} color="var(--success)" /><span>Face Verified ✓ — Your selfie matches your profile photo</span></div>
                                         ) : faceAuthStep === 'failed' ? (
                                             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', alignItems: 'flex-start' }}>
-                                                <div className="alert alert-error" style={{ margin: 0 }}>⚠️ Verification failed. Make sure your face is clearly visible and try again.</div>
-                                                <button type="button" className="btn btn-outline" onClick={() => { setFaceAuthStep('idle'); startCamera('face_auth'); }}><ScanFace size={18} /> Retry</button>
+                                                <div className="alert alert-error" style={{ margin: 0, display: 'flex', alignItems: 'flex-start', gap: '0.5rem' }}>
+                                                    <AlertTriangle size={18} style={{ flexShrink: 0, marginTop: 2 }} />
+                                                    <span>{faceAuthError || 'Verification failed. Try again.'}</span>
+                                                </div>
+                                                <button type="button" className="btn btn-outline" onClick={() => { setFaceAuthStep('idle'); setFaceAuthError(''); startCamera('face_auth'); }}><ScanFace size={18} /> Retry Verification</button>
                                             </div>
                                         ) : (
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                                                <div className="face-placeholder"><UserIcon size={32} color="var(--text-secondary)" /></div>
-                                                <button type="button" className="btn btn-outline" onClick={() => startCamera('face_auth')}><ScanFace size={18} /> Start Face Verification</button>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                                                    <div className="face-placeholder"><UserIcon size={32} color="var(--text-secondary)" /></div>
+                                                    <button type="button" className="btn btn-outline" onClick={() => { setFaceAuthError(''); startCamera('face_auth'); }} disabled={!modelsLoaded}>
+                                                        <ScanFace size={18} /> {modelsLoaded ? 'Start Face Verification' : 'Loading models...'}
+                                                    </button>
+                                                </div>
+                                                {!photoPreview && (
+                                                    <p style={{ fontSize: '0.82rem', color: 'var(--primary)', margin: 0 }}>
+                                                        ⚠️ Upload your profile photo first — your selfie will be compared against it.
+                                                    </p>
+                                                )}
                                             </div>
                                         )}
                                     </div>

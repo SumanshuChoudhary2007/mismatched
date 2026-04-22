@@ -63,7 +63,8 @@ export const getAdminUsers = async () => {
     const { data, error } = await supabase
         .from('profiles')
         .select('*')
-        .eq('is_admin', false);
+        .eq('is_admin', false)
+        .eq('is_quarantined', false);
     if (error) throw new Error(error.message);
     return data || [];
 };
@@ -80,7 +81,7 @@ export const getAdminMatches = async () => {
         return { ...m, user1: u1, user2: u2 };
     }));
 
-    return enriched;
+    return enriched.filter(m => !m.user1?.is_quarantined && !m.user2?.is_quarantined);
 };
 
 export const createMatch = async (user1_id: string, user2_id: string, compatibility_score = 0) => {
@@ -176,7 +177,8 @@ export const uploadProfilePhoto = async (file: Blob, userId: string): Promise<st
         .upload(fileName, file, { upsert: true, contentType: 'image/jpeg' });
     if (error) throw new Error('Photo upload failed: ' + error.message);
     const { data } = supabase.storage.from('profile-photos').getPublicUrl(fileName);
-    return data.publicUrl;
+    // Add cache-busting timestamp so the browser always loads the fresh image
+    return `${data.publicUrl}?t=${Date.now()}`;
 };
 
 export const sendMessage = async (match_id: string, content: string) => {
@@ -198,6 +200,24 @@ export const sendMessage = async (match_id: string, content: string) => {
         .select('*, sender:profiles(full_name)')
         .single();
 
+    if (error) throw new Error(error.message);
+    return data;
+};
+
+export const reportUser = async (reported_id: string, match_id: string, reason: string) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Not authenticated');
+
+    const { data, error } = await supabase
+        .from('reports')
+        .insert([{
+            reporter_id: user.id,
+            reported_id,
+            match_id,
+            reason,
+            status: 'pending'
+        }]);
+    
     if (error) throw new Error(error.message);
     return data;
 };

@@ -1,20 +1,71 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { getRegistrationCounts } from '../lib/api';
-import { Sparkles, Mail, Lock, ArrowRight, Users, User, XCircle, AlertTriangle } from 'lucide-react';
+import { Sparkles, Mail, Lock, ArrowRight, Users, User, XCircle, AlertTriangle, RefreshCw } from 'lucide-react';
 
 const LIMIT = 20;
 
-// ── Math CAPTCHA generator ──────────────────────────────────────────────────
-const generateCaptcha = () => {
-    const ops = ['+', '-', '×'] as const;
-    const op = ops[Math.floor(Math.random() * ops.length)];
-    let a = Math.floor(Math.random() * 9) + 1;
-    let b = Math.floor(Math.random() * 9) + 1;
-    if (op === '-' && b > a) [a, b] = [b, a];  // keep result ≥ 0
-    const answer = op === '+' ? a + b : op === '-' ? a - b : a * b;
-    return { question: `${a} ${op} ${b}`, answer };
+// ── Canvas CAPTCHA generator ────────────────────────────────────────────────
+const CAPTCHA_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O/1/I confusion
+const generateCaptchaText = () =>
+    Array.from({ length: 6 }, () => CAPTCHA_CHARS[Math.floor(Math.random() * CAPTCHA_CHARS.length)]).join('');
+
+const drawCaptcha = (canvas: HTMLCanvasElement, text: string) => {
+    const W = canvas.width = 220;
+    const H = canvas.height = 70;
+    const ctx = canvas.getContext('2d')!;
+
+    // Background gradient
+    const bg = ctx.createLinearGradient(0, 0, W, H);
+    bg.addColorStop(0, '#1a1a2e');
+    bg.addColorStop(1, '#16213e');
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, W, H);
+
+    // Noise dots
+    for (let i = 0; i < 80; i++) {
+        ctx.beginPath();
+        ctx.arc(Math.random() * W, Math.random() * H, Math.random() * 1.5, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(255,255,255,${Math.random() * 0.25})`;
+        ctx.fill();
+    }
+
+    // Strike-through lines
+    for (let i = 0; i < 4; i++) {
+        ctx.beginPath();
+        ctx.moveTo(Math.random() * W, Math.random() * H);
+        ctx.bezierCurveTo(
+            Math.random() * W, Math.random() * H,
+            Math.random() * W, Math.random() * H,
+            Math.random() * W, Math.random() * H
+        );
+        ctx.strokeStyle = `rgba(255,255,255,${0.1 + Math.random() * 0.15})`;
+        ctx.lineWidth = 1;
+        ctx.stroke();
+    }
+
+    // Characters
+    const colors = ['#ff2e63', '#08d9d6', '#ff9f43', '#a29bfe', '#55efc4', '#fd79a8'];
+    const charW = W / (text.length + 1);
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'center';
+
+    text.split('').forEach((ch, i) => {
+        const x = charW * (i + 1);
+        const y = H / 2 + (Math.random() - 0.5) * 12;
+        const angle = (Math.random() - 0.5) * 0.5;
+        const size = 26 + Math.floor(Math.random() * 8);
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(angle);
+        ctx.font = `bold ${size}px 'Courier New', monospace`;
+        ctx.fillStyle = colors[i % colors.length];
+        ctx.shadowColor = colors[(i + 2) % colors.length];
+        ctx.shadowBlur = 4;
+        ctx.fillText(ch, 0, 0);
+        ctx.restore();
+    });
 };
 
 export default function Signup() {
@@ -27,9 +78,11 @@ export default function Signup() {
     const [counts, setCounts] = useState<{ male_count: number; female_count: number }>({ male_count: 0, female_count: 0 });
     const [countsLoading, setCountsLoading] = useState(true);
     // CAPTCHA state
-    const [captcha, setCaptcha] = useState(generateCaptcha);
+    const [captchaText, setCaptchaText] = useState(() => generateCaptchaText());
     const [captchaInput, setCaptchaInput] = useState('');
     const [captchaError, setCaptchaError] = useState(false);
+    const [captchaSpinning, setCaptchaSpinning] = useState(false);
+    const canvasRef = useRef<HTMLCanvasElement>(null);
     const navigate = useNavigate();
 
     // Load and refresh counts every 10 seconds
@@ -47,6 +100,19 @@ export default function Signup() {
         return () => { mounted = false; clearInterval(interval); };
     }, []);
 
+    // Draw CAPTCHA on canvas whenever captchaText changes
+    useEffect(() => {
+        if (canvasRef.current) drawCaptcha(canvasRef.current, captchaText);
+    }, [captchaText]);
+
+    const refreshCaptcha = useCallback(() => {
+        setCaptchaSpinning(true);
+        setTimeout(() => setCaptchaSpinning(false), 400);
+        setCaptchaText(generateCaptchaText());
+        setCaptchaInput('');
+        setCaptchaError(false);
+    }, []);
+
     const malePercent = Math.round((counts.male_count / LIMIT) * 100);
     const femalePercent = Math.round((counts.female_count / LIMIT) * 100);
     const maleFull = counts.male_count >= LIMIT;
@@ -58,11 +124,10 @@ export default function Signup() {
         e.preventDefault();
         // Honeypot check — bots fill hidden fields, real users don't
         if (honeypot) { setLoading(false); return; }
-        // Math CAPTCHA validation
-        if (parseInt(captchaInput, 10) !== captcha.answer) {
+        // Canvas CAPTCHA validation (case-insensitive)
+        if (captchaInput.toUpperCase().trim() !== captchaText) {
             setCaptchaError(true);
-            setCaptcha(generateCaptcha());  // refresh question on failure
-            setCaptchaInput('');
+            refreshCaptcha();
             return;
         }
         setCaptchaError(false);
@@ -356,35 +421,44 @@ export default function Signup() {
                             <p className="form-hint">Use at least 6 characters for a secure password</p>
                         </div>
 
-                        {/* ── Math CAPTCHA ───────────────────────────────── */}
+                        {/* ── Canvas CAPTCHA ─────────────────────────────── */}
                         <div className="form-group captcha-group">
-                            <label className="form-label">
-                                Human Verification
-                            </label>
+                            <label className="form-label">Human Verification</label>
                             <div className="captcha-box">
-                                <div className="captcha-question">
-                                    <span className="captcha-q-text">What is <strong>{captcha.question}</strong> ?</span>
+                                <div className="captcha-canvas-row">
+                                    <canvas
+                                        ref={canvasRef}
+                                        className={`captcha-canvas${captchaError ? ' captcha-canvas--error' : ''}`}
+                                        aria-label="CAPTCHA image — type the characters shown"
+                                    />
                                     <button
                                         type="button"
-                                        className="captcha-refresh"
-                                        onClick={() => { setCaptcha(generateCaptcha()); setCaptchaInput(''); setCaptchaError(false); }}
-                                        title="New question"
+                                        className={`captcha-refresh${captchaSpinning ? ' captcha-refresh--spin' : ''}`}
+                                        onClick={refreshCaptcha}
+                                        title="New CAPTCHA"
                                         aria-label="Refresh CAPTCHA"
-                                    >↻</button>
+                                        disabled={selectedGenderFull}
+                                    >
+                                        <RefreshCw size={16} />
+                                    </button>
                                 </div>
                                 <input
-                                    type="number"
+                                    type="text"
                                     className={`form-input captcha-input${captchaError ? ' captcha-input--error' : ''}`}
-                                    placeholder="Your answer"
+                                    placeholder="Type the characters above"
                                     value={captchaInput}
                                     onChange={e => { setCaptchaInput(e.target.value); setCaptchaError(false); }}
                                     required
                                     autoComplete="off"
+                                    autoCorrect="off"
+                                    autoCapitalize="characters"
+                                    maxLength={6}
+                                    spellCheck={false}
                                     disabled={selectedGenderFull}
                                 />
                             </div>
                             {captchaError && (
-                                <p className="captcha-error-msg">❌ Wrong answer — try the new question</p>
+                                <p className="captcha-error-msg">❌ Incorrect — a new code has been generated, try again</p>
                             )}
                         </div>
 

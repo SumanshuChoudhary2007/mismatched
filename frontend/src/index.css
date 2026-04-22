@@ -1747,7 +1747,7 @@ body {
 .text-secondary { color: var(--text-secondary); }
 
 /* ════════════════════════════════════════════════════════════════════════════
-   MATH CAPTCHA
+   CANVAS CAPTCHA
    ════════════════════════════════════════════════════════════════════════════ */
 .captcha-group {
   margin-top: 0.25rem;
@@ -1763,16 +1763,27 @@ body {
   padding: 1rem 1.25rem;
 }
 
-.captcha-question {
+.captcha-canvas-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 0.75rem;
 }
 
-.captcha-q-text {
-  font-size: 1.1rem;
-  color: var(--text-primary);
-  letter-spacing: 0.5px;
+.captcha-canvas {
+  border-radius: 10px;
+  border: 1.5px solid var(--border);
+  display: block;
+  max-width: 220px;
+  height: 70px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  cursor: default;
+  user-select: none;
+}
+
+.captcha-canvas--error {
+  border-color: var(--primary) !important;
+  box-shadow: 0 0 0 3px rgba(255, 46, 99, 0.2);
+  animation: shakeCaptcha 0.35s ease;
 }
 
 .captcha-q-text strong {
@@ -1788,11 +1799,10 @@ body {
 .captcha-refresh {
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 10px;
   color: var(--text-secondary);
-  font-size: 1.1rem;
-  width: 32px;
-  height: 32px;
+  width: 38px;
+  height: 38px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1802,17 +1812,26 @@ body {
 }
 
 .captcha-refresh:hover {
-  background: rgba(255,255,255,0.12);
+  background: rgba(255, 255, 255, 0.12);
   color: white;
-  transform: rotate(90deg);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.captcha-refresh--spin svg {
+  animation: spinOnce 0.4s ease;
+}
+
+@keyframes spinOnce {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
 }
 
 .captcha-input {
-  max-width: 140px;
   text-align: center;
-  font-size: 1.15rem;
+  font-size: 1.2rem;
   font-weight: 700;
-  letter-spacing: 2px;
+  letter-spacing: 6px;
+  text-transform: uppercase;
 }
 
 .captcha-input--error {
@@ -1916,8 +1935,7 @@ body {
 @media (max-width: 480px) {
   .profile-submitted-card { padding: 2rem 1.25rem; margin: 1.5rem auto; }
   .profile-submitted-title { font-size: 1.5rem; }
-  .captcha-q-text { font-size: 1rem; }
-  .captcha-q-text strong { font-size: 1.15rem; }
+  .captcha-canvas { max-width: 100%; }
 }
 
 /* ════════════════════════════════════════════════════════════════════════════

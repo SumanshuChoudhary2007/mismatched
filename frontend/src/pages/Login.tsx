@@ -15,11 +15,24 @@ export default function Login() {
         setLoading(true);
         setError('');
 
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) {
             setError(error.message);
             setLoading(false);
             return;
+        }
+
+        // Check if this user is an admin — admins go to their own dashboard
+        if (data.user) {
+            const { data: profile } = await supabase
+                .from('profiles')
+                .select('is_admin')
+                .eq('id', data.user.id)
+                .single();
+            if (profile?.is_admin) {
+                navigate('/admin/dashboard');
+                return;
+            }
         }
 
         navigate('/dashboard');

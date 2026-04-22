@@ -231,6 +231,14 @@ export default function AdminDashboard() {
         fetchData();
     };
 
+    const quarantineUser = async (userId: string, reason = 'Manually quarantined by admin') => {
+        if (!window.confirm('Move this user to Quarantine? They will be hidden from matching.')) return;
+        await supabase.from('profiles').update({ is_quarantined: true, quarantine_reason: reason }).eq('id', userId);
+        setMessage('⚠️ User quarantined.');
+        if (selectedUser?.id === userId) setSelectedUser(null);
+        fetchData();
+    };
+
     const updateReportStatus = async (reportId: string, status: string) => {
         await supabase.from('reports').update({ status }).eq('id', reportId);
         setReports(prev => prev.map(r => r.id === reportId ? { ...r, status } : r));
@@ -361,7 +369,10 @@ export default function AdminDashboard() {
                                                 <div className="user-card-title">{u.full_name || 'Incomplete'}<span className="user-badge">{u.gender}</span></div>
                                                 <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: '0.3rem 0' }}>{u.age && `${u.age} yrs`} {u.city && `· ${u.city}`}</p>
                                                 <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Wants: {u.interested_in}</p>
-                                                <button className="btn btn-outline full-width mt-4" onClick={e => { e.stopPropagation(); setSelectedUser(u); }}>Find Match</button>
+                                                <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
+                                                    <button className="btn btn-outline" style={{ flex: 2 }} onClick={e => { e.stopPropagation(); setSelectedUser(u); }}>Find Match</button>
+                                                    <button className="btn" style={{ flex: 1, padding: '0.5rem', background: 'rgba(255,138,0,0.1)', color: '#FF8A00', border: '1px solid rgba(255,138,0,0.3)', fontSize: '0.82rem' }} onClick={(e) => { e.stopPropagation(); quarantineUser(u.id); }} title="Quarantine User"><AlertTriangle size={14} /></button>
+                                                </div>
                                             </div>
                                         </div>
                                     ))}
@@ -415,9 +426,12 @@ export default function AdminDashboard() {
                                                 <div className="user-card-body">
                                                     <div className="user-card-title">{u.full_name}<span className="user-badge">{u.age} · {u.city}</span></div>
                                                     <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: '0.5rem 0', minHeight: 42 }}>{u.about_me}</p>
-                                                    <button className="btn full-width mt-4" style={{ background: 'linear-gradient(135deg,var(--primary),var(--secondary))', color: 'white' }} onClick={() => handleMatch(u.id, u._score)}>
-                                                        <Heart size={18} /> Match with {selectedUser.full_name.split(' ')[0]}
-                                                    </button>
+                                                    <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
+                                                        <button className="btn" style={{ flex: 3, background: 'linear-gradient(135deg,var(--primary),var(--secondary))', color: 'white' }} onClick={() => handleMatch(u.id, u._score)}>
+                                                            <Heart size={18} /> Match
+                                                        </button>
+                                                        <button className="btn" style={{ flex: 1, padding: '0.5rem', background: 'rgba(255,138,0,0.1)', color: '#FF8A00', border: '1px solid rgba(255,138,0,0.3)', fontSize: '0.82rem' }} onClick={(e) => { e.stopPropagation(); quarantineUser(u.id); }} title="Quarantine User"><AlertTriangle size={14} /></button>
+                                                    </div>
                                                 </div>
                                             </div>
                                         );

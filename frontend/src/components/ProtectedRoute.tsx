@@ -22,16 +22,25 @@ export default function ProtectedRoute({ children, adminOnly = false }: Protecte
         return;
       }
 
-      if (adminOnly) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('is_admin')
-          .eq('id', session.user.id)
-          .single();
+      // Always fetch the profile to check admin status
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('is_admin')
+        .eq('id', session.user.id)
+        .single();
 
+      if (adminOnly) {
+        // Admin route: must be admin, otherwise boot to /admin login
         if (!profile?.is_admin) {
           await supabase.auth.signOut();
           setRedirect('/admin');
+          setLoading(false);
+          return;
+        }
+      } else {
+        // User route: if the person is an admin, boot them to admin dashboard
+        if (profile?.is_admin) {
+          setRedirect('/admin/dashboard');
           setLoading(false);
           return;
         }

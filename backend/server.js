@@ -48,7 +48,20 @@ app.get('/api/profile', authenticateUser, async (req, res) => {
 });
 
 app.post('/api/profile', authenticateUser, async (req, res) => {
-  const updates = { ...req.body, id: req.user.id, email: req.user.email };
+  const { profile_photo, ...otherFields } = req.body;
+
+  // If profile_photo is being changed, force face re-verification
+  let updates = { ...otherFields, id: req.user.id, email: req.user.email };
+  if (profile_photo !== undefined) {
+    // Fetch existing photo to check if it actually changed
+    const { data: existing } = await supabase
+      .from('profiles').select('profile_photo').eq('id', req.user.id).single();
+    updates.profile_photo = profile_photo;
+    if (existing?.profile_photo !== profile_photo) {
+      updates.face_verified = false; // reset — DB trigger also enforces this
+    }
+  }
+
   const { data, error } = await supabase.from('profiles').upsert(updates).select().single();
   if (error) return res.status(400).json({ error: error.message });
   res.json(data);
@@ -72,7 +85,12 @@ app.get('/api/matches', authenticateUser, async (req, res) => {
 });
 
 app.get('/api/admin/users', authenticateUser, isAdmin, async (req, res) => {
-  const { data, error } = await supabase.from('profiles').select('*').eq('is_admin', false);
+  // Include face_verified so admins can see who has completed verification
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('*, face_verified')
+    .eq('is_admin', false)
+    .order('created_at', { ascending: false });
   if (error) return res.status(400).json({ error: error.message });
   res.json(data);
 });
@@ -130,7 +148,17 @@ app.get('/api/matches/:match_id/messages', authenticateUser, async (req, res) =>
 app.post('/api/matches/:match_id/messages', authenticateUser, async (req, res) => {
   const { match_id } = req.params;
   const { content } = req.body;
-  
+
+  if (!content?.trim()) return res.status(400).json({ error: 'Message content is required.' });
+
+  // ── 30-word limit (server-side enforcement, mirrors frontend) ────────────
+  const wordCount = content.trim().split(/\s+/).filter(Boolean).length;
+  if (wordCount > 30) {
+    return res.status(400).json({
+      error: `Message too long — max 30 words, you used ${wordCount}.`
+    });
+  }
+
   // Verify match exists and user is part of it
   const { data: match, error: matchError } = await supabase.from('matches').select('*').eq('id', match_id).single();
   if (matchError || (match.user1_id !== req.user.id && match.user2_id !== req.user.id)) return res.status(403).json({ error: 'Access denied' });
@@ -144,9 +172,9 @@ app.post('/api/matches/:match_id/messages', authenticateUser, async (req, res) =
   const { data, error } = await supabase.from('messages').insert([{
     match_id,
     sender_id: req.user.id,
-    content
+    content: content.trim()
   }]).select('*, sender:profiles(full_name)').single();
-  
+
   if (error) return res.status(400).json({ error: error.message });
   res.json(data);
 });

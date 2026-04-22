@@ -328,7 +328,7 @@ export default function UserDashboard() {
             }
 
             // ── 3. Compare descriptors (Euclidean distance) ───────────
-            // Distance < 0.55 = same person  |  >= 0.55 = different person
+            // Distance < 0.45 = same person  |  >= 0.45 = different person
             const distance = faceapi.euclideanDistance(
                 profileDetection.descriptor,
                 selfieDetection.descriptor
@@ -336,7 +336,8 @@ export default function UserDashboard() {
 
             console.log('[FaceAuth] Distance:', distance);
 
-            if (distance > 0.55) {
+            // Using 0.45 threshold for much stricter matching (fixes false positives)
+            if (distance > 0.45) {
                 setFaceAuthError(`❌ Face does not match your profile photo (distance: ${distance.toFixed(2)}). Make sure YOU are in the profile photo and looking at the camera.`);
                 setFaceAuthStep('failed');
                 stopCamera();

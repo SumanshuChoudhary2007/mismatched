@@ -144,7 +144,13 @@ export default function Signup() {
             return;
         }
 
-        const { data, error: signupError } = await supabase.auth.signUp({ email, password });
+        const { data, error: signupError } = await supabase.auth.signUp({ 
+            email, 
+            password,
+            options: {
+                data: { gender }
+            }
+        });
         if (signupError) {
             setError(signupError.message);
             setLoading(false);

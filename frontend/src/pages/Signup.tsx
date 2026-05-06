@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { getRegistrationCounts } from '../lib/api';
-import { Sparkles, Mail, Lock, ArrowRight, Users, User, XCircle, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Sparkles, Mail, Lock, ArrowRight, Users, User, XCircle, AlertTriangle, RefreshCw, Eye, EyeOff } from 'lucide-react';
 
 const LIMIT = 20;
 
@@ -77,6 +77,7 @@ export default function Signup() {
     const [loading, setLoading] = useState(false);
     const [counts, setCounts] = useState<{ male_count: number; female_count: number }>({ male_count: 0, female_count: 0 });
     const [countsLoading, setCountsLoading] = useState(true);
+    const [showPassword, setShowPassword] = useState(false);
     // CAPTCHA state
     const [captchaText, setCaptchaText] = useState(() => generateCaptchaText());
     const [captchaInput, setCaptchaInput] = useState('');
@@ -414,7 +415,7 @@ export default function Signup() {
                             <div className="input-icon-wrapper">
                                 <Lock size={18} className="input-icon" />
                                 <input
-                                    type="password"
+                                    type={showPassword ? "text" : "password"}
                                     className="form-input with-icon"
                                     placeholder="Minimum 6 characters"
                                     value={password}
@@ -423,6 +424,14 @@ export default function Signup() {
                                     minLength={6}
                                     disabled={selectedGenderFull}
                                 />
+                                <button
+                                    type="button"
+                                    className="password-toggle-btn"
+                                    onClick={() => setShowPassword(!showPassword)}
+                                    tabIndex={-1}
+                                >
+                                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                                </button>
                             </div>
                             <p className="form-hint">Use at least 6 characters for a secure password</p>
                         </div>

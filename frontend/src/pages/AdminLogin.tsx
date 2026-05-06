@@ -1,12 +1,14 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
+import { Lock, Mail, Eye, EyeOff } from 'lucide-react';
 
 export default function AdminLogin() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
+    const [showPassword, setShowPassword] = useState(false);
     const navigate = useNavigate();
 
     const handleLogin = async (e: React.FormEvent) => {
@@ -46,23 +48,37 @@ export default function AdminLogin() {
                     <form onSubmit={handleLogin}>
                         <div className="form-group">
                             <label className="form-label">Admin Email</label>
-                            <input 
-                                type="email" 
-                                className="form-input" 
-                                value={email} 
-                                onChange={(e) => setEmail(e.target.value)} 
-                                required 
-                            />
+                            <div className="input-icon-wrapper">
+                                <Mail size={18} className="input-icon" />
+                                <input 
+                                    type="email" 
+                                    className="form-input with-icon" 
+                                    value={email} 
+                                    onChange={(e) => setEmail(e.target.value)} 
+                                    required 
+                                />
+                            </div>
                         </div>
                         <div className="form-group">
                             <label className="form-label">Password</label>
-                            <input 
-                                type="password" 
-                                className="form-input" 
-                                value={password} 
-                                onChange={(e) => setPassword(e.target.value)} 
-                                required 
-                            />
+                            <div className="input-icon-wrapper">
+                                <Lock size={18} className="input-icon" />
+                                <input 
+                                    type={showPassword ? "text" : "password"} 
+                                    className="form-input with-icon" 
+                                    value={password} 
+                                    onChange={(e) => setPassword(e.target.value)} 
+                                    required 
+                                />
+                                <button
+                                    type="button"
+                                    className="password-toggle-btn"
+                                    onClick={() => setShowPassword(!showPassword)}
+                                    tabIndex={-1}
+                                >
+                                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                                </button>
+                            </div>
                         </div>
                         <button type="submit" className="btn full-width" style={{background: 'var(--secondary)', color: 'white'}} disabled={loading}>
                             {loading ? 'Authenticating...' : 'Access Portal'}

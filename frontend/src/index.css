@@ -2159,3 +2159,29 @@ input, textarea {
   padding: 2rem;
 }
 
+/* --- Password Toggle Button --- */
+.password-toggle-btn {
+  position: absolute;
+  right: 0.75rem;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 0.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s ease;
+  z-index: 5;
+}
+
+.password-toggle-btn:hover {
+  color: var(--text-primary);
+}
+
+.input-icon-wrapper .form-input.with-icon {
+  padding-right: 3rem; /* Space for the toggle button */
+}
+
